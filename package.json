@@ -1,0 +1,63 @@
+{
+  "name": "conductor-tasks",
+  "version": "0.1.0",
+  "description": "AI-powered task management system with CLI and MCP support",
+  "main": "./build/index.js",
+  "type": "module",
+  "bin": {
+    "conductor-tasks": "./build/index.js"
+  },
+  "scripts": {
+    "start": "node ./build/index.js --serve-mcp",
+    "cli": "node ./build/index.js",
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "dev": "tsc -w"
+  },
+  "keywords": [
+    "task",
+    "management",
+    "ai",
+    "llm",
+    "cli",
+    "mcp",
+    "conductor"
+  ],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/markdown-it": "^13.0.7",
+    "@types/node": "^20.14.9",
+    "typescript": "^5.5.2",
+    "@types/yargs": "^17.0.32"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.1",
+    "@google/generative-ai": "^0.3.0",
+    "@mistralai/mistralai": "^1.6.0",
+    "@modelcontextprotocol/sdk": "^1.4.0",
+    "ajv": "^8.17.1",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "groq-sdk": "^0.20.1",
+    "inquirer": "^9.3.7",
+    "markdown-it": "^14.0.0",
+    "openai": "^4.96.2",
+    "winston": "^3.17.0",
+    "zod": "^3.23.8",
+    "yargs": "^17.7.2"
+  }
+}
