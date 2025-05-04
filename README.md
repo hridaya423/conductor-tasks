@@ -251,6 +251,3 @@ If you are primarily using Conductor Tasks via the command line (not through MCP
 4.  Run in watch mode: `npm run dev`
 5.  Run CLI during development: `node ./build/index.js [command] [options]`
 
-## License
-
-MIT
