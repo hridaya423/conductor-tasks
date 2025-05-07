@@ -40,7 +40,6 @@ export async function visualizeTasksKanbanHandler(taskManager, params) {
             priority: priorityFilter,
             tags: tag ? [tag] : undefined
         });
-        // Format response (same as original)
         const statusColumns = {
             [TaskStatus.BACKLOG]: [],
             [TaskStatus.TODO]: [],
@@ -67,7 +66,7 @@ export async function visualizeTasksKanbanHandler(taskManager, params) {
         kanbanBoard += '\n';
         kanbanBoard += '|';
         Object.keys(statusColumns).forEach(() => {
-            kanbanBoard += `${'- '.repeat(columnWidth / 2)} `.padEnd(columnWidth + 2) + '|'; // Improved separator
+            kanbanBoard += `${'- '.repeat(columnWidth / 2)} `.padEnd(columnWidth + 2) + '|';
         });
         kanbanBoard += '\n';
         const maxTasks = Math.max(0, ...Object.values(statusColumns).map(column => column.length));
@@ -80,7 +79,7 @@ export async function visualizeTasksKanbanHandler(taskManager, params) {
                     const priorityIndicator = showPriority ? `[${task.priority.charAt(0).toUpperCase()}] ` : '';
                     const complexityIndicator = showComplexity ? ` (${task.complexity}/10)` : '';
                     const baseTitle = task.title;
-                    const availableLength = columnWidth - priorityIndicator.length - complexityIndicator.length - 1; // -1 for space
+                    const availableLength = columnWidth - priorityIndicator.length - complexityIndicator.length - 1;
                     const taskTitle = baseTitle.length > availableLength
                         ? baseTitle.substring(0, availableLength) + '…'
                         : baseTitle;

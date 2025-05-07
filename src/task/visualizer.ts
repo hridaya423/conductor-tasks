@@ -1,5 +1,6 @@
 import chalk from 'chalk';
-import { TaskManager, Task, TaskPriority, TaskStatus } from '../taskManager.js';
+import { TaskManager } from './taskManager.js';
+import { Task, TaskPriority, TaskStatus } from '../core/types.js';
 
 export class TaskVisualizer {
   private taskManager: TaskManager;
@@ -14,7 +15,7 @@ export class TaskVisualizer {
     filterPriority?: TaskPriority;
     filterTag?: string;
     compact?: boolean;
-  } = {}): void {
+  } = {}): string {
     const { 
       showPriority = true,
       showComplexity = true,
@@ -43,60 +44,110 @@ export class TaskVisualizer {
       statusTasks.push(task);
     });
 
-    const terminalWidth = process.stdout.columns || 80;
+    tasksByStatus.forEach((statusTasks, status) => {
+      tasksByStatus.set(
+        status, 
+        statusTasks.sort((a, b) => {
+          const priorityOrder: Record<TaskPriority, number> = {
+            [TaskPriority.CRITICAL]: 0,
+            [TaskPriority.HIGH]: 1,
+            [TaskPriority.MEDIUM]: 2,
+            [TaskPriority.LOW]: 3,
+            [TaskPriority.BACKLOG]: 4
+          };
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        })
+      );
+    });
+
+    const terminalWidth = process.stdout.columns || 100;
     const numColumns = Object.keys(TaskStatus).length;
-    const columnWidth = Math.floor((terminalWidth - (numColumns - 1)) / numColumns);
+    const columnWidth = Math.floor((terminalWidth - (numColumns * 2)) / numColumns);
+
+    const totalTasks = tasks.length;
+    const doneTasks = tasksByStatus.get(TaskStatus.DONE)?.length || 0;
+    const progressPercentage = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    let output = '';
+    
+    output += '\n' + chalk.bold.blue('╔═══════════════════════════════════════════════════════════════╗') + '\n';
+    output += chalk.bold.blue('║ ') + chalk.bold.white('TASK BOARD') + chalk.bold.blue(' '.repeat(terminalWidth - 13) + '║') + '\n';
+    output += chalk.bold.blue('╚═══════════════════════════════════════════════════════════════╝') + '\n\n';
+    
+    output += chalk.white(`Total Tasks: ${totalTasks} | Progress: ${progressPercentage}% complete\n\n`);
 
     const headers = Object.values(TaskStatus).map(status => {
       const count = tasksByStatus.get(status)?.length || 0;
-      return `${status.toUpperCase()} (${count})`;
+      return `${this.formatStatusText(status)} (${count})`;
     });
-
-    console.log('\n' + chalk.bold.blue('=== Task Board ===') + '\n');
 
     headers.forEach((header, index) => {
       const paddedHeader = this.padCenter(header, columnWidth);
-      process.stdout.write(chalk.bold.white(paddedHeader));
+      output += chalk.bold.white(paddedHeader);
 
       if (index < headers.length - 1) {
-        process.stdout.write('|');
+        output += ' │ ';
       }
     });
-    console.log('\n' + '='.repeat(terminalWidth));
+    
+    output += '\n' + '─'.repeat(terminalWidth) + '\n';
 
-    const maxTasks = Math.max(...Array.from(tasksByStatus.values()).map(tasks => tasks.length));
+    const maxTasks = Math.max(...Array.from(tasksByStatus.values()).map(tasks => tasks.length), 1);
+    const maxTasksToShow = Math.min(maxTasks, 20); 
 
-    for (let i = 0; i < maxTasks; i++) {
+    
+    for (let i = 0; i < maxTasksToShow; i++) {
       Object.values(TaskStatus).forEach((status, statusIndex) => {
         const statusTasks = tasksByStatus.get(status) || [];
         const task = statusTasks[i];
 
         if (task) {
-
           let taskDisplay = compact 
             ? this.formatTaskCompact(task, { showPriority, showComplexity })
-            : this.formatTask(task, { showPriority, showComplexity });
+            : this.formatTaskEnhanced(task, { showPriority, showComplexity, columnWidth });
 
-          if (taskDisplay.length > columnWidth) {
-            taskDisplay = taskDisplay.substring(0, columnWidth - 3) + '...';
-          } else {
-            taskDisplay = taskDisplay.padEnd(columnWidth, ' ');
-          }
-
-          process.stdout.write(taskDisplay);
+          output += taskDisplay;
         } else {
-
-          process.stdout.write(' '.repeat(columnWidth));
+          output += ' '.repeat(columnWidth);
         }
 
         if (statusIndex < Object.values(TaskStatus).length - 1) {
-          process.stdout.write('|');
+          output += ' │ ';
         }
       });
-      console.log();
+      output += '\n';
+      
+      if (i < maxTasksToShow - 1) {
+        Object.values(TaskStatus).forEach((_, statusIndex) => {
+          output += '─'.repeat(columnWidth);
+          if (statusIndex < Object.values(TaskStatus).length - 1) {
+            output += '─┼─';
+          }
+        });
+        output += '\n';
+      }
     }
 
-    console.log('='.repeat(terminalWidth) + '\n');
+    const hiddenTasks = maxTasks - maxTasksToShow;
+    if (hiddenTasks > 0) {
+      output += '\n' + chalk.italic.gray(`... and ${hiddenTasks} more tasks not shown. Use filters to narrow results.`) + '\n';
+    }
+
+    output += '═'.repeat(terminalWidth) + '\n';
+    
+    if (showPriority) {
+      output += chalk.bold('\nPriority: ');
+      output += chalk.red('● CRITICAL ') + chalk.yellow('● HIGH ') + chalk.blue('● MEDIUM ') + chalk.green('● LOW ') + chalk.gray('● BACKLOG\n');
+    }
+    
+    if (filterPriority || filterTag) {
+      output += chalk.italic('\nActive Filters: ');
+      if (filterPriority) output += chalk.white(`Priority=${filterPriority} `);
+      if (filterTag) output += chalk.white(`Tag=${filterTag} `);
+      output += '\n';
+    }
+    
+    return output;
   }
 
   displayDependencyTree(rootTaskId?: string): void {
@@ -150,9 +201,14 @@ export class TaskVisualizer {
     console.log();
   }
 
-  displayDashboard(): void {
+  displayDashboard(): string {
     const allTasks = this.taskManager.getTasks();
     const totalTasks = allTasks.length;
+    let output = '';
+
+    if (totalTasks === 0) {
+      return chalk.yellow('\nNo tasks found. Create tasks with the "create-task" command.\n');
+    }
 
     const tasksByStatus = new Map<TaskStatus, number>();
     Object.values(TaskStatus).forEach(status => {
@@ -175,38 +231,131 @@ export class TaskVisualizer {
     });
 
     const tasksNeedingAttention = this.taskManager.getTasksNeedingAttention?.() || [];
+    const recentTasks = [...allTasks]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 5);
 
-    console.log(chalk.bold.blue('\n=== Task Dashboard ===\n'));
+    
+    const tagCounts = new Map<string, number>();
+    allTasks.forEach(task => {
+      task.tags.forEach(tag => {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      });
+    });
 
-    console.log(chalk.bold('Task Summary:'));
-    console.log(`Total Tasks: ${totalTasks}`);
+    
+    const topTags = Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
 
-    console.log(chalk.bold('\nBy Status:'));
+    
+    const completedTasks = tasksByStatus.get(TaskStatus.DONE) || 0;
+    const progressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    
+    
+    const progressBarWidth = 50;
+    const filledWidth = Math.round((progressPercentage / 100) * progressBarWidth);
+    const progressBar = '[' + '█'.repeat(filledWidth) + '·'.repeat(progressBarWidth - filledWidth) + ']';
+
+    
+    output += '\n' + chalk.bold.blue('╔══════════════════════════════════════════════════════════╗') + '\n';
+    output += chalk.bold.blue('║ ') + chalk.bold.white('PROJECT DASHBOARD') + chalk.bold.blue(' '.repeat(31) + '║') + '\n';
+    output += chalk.bold.blue('╚══════════════════════════════════════════════════════════╝') + '\n\n';
+
+    
+    output += chalk.bold.white('📊 Project Overview') + '\n';
+    output += chalk.white('─'.repeat(80)) + '\n';
+    output += chalk.white(`Total Tasks: ${totalTasks}`) + '\n';
+    output += chalk.white(`Progress: ${progressPercentage}% complete`) + '\n';
+    output += chalk.white(`${progressBar} ${progressPercentage}%`) + '\n\n';
+    
+    
+    output += chalk.bold.white('📋 Task Status') + '\n';
+    output += chalk.white('─'.repeat(80)) + '\n';
+    
+    
     tasksByStatus.forEach((count, status) => {
       const percentage = totalTasks > 0 ? ((count / totalTasks) * 100).toFixed(1) : '0.0';
+      const barWidth = Math.round((count / totalTasks) * 40);
       const statusColor = this.getStatusColor(status);
-      console.log(`${statusColor(status.padEnd(12))}: ${count} (${percentage}%)`);
+      const bar = '█'.repeat(barWidth);
+      output += `${statusColor(status.padEnd(12))}: ${count.toString().padStart(3)} (${percentage.padStart(4)}%) ${chalk.white(bar)}\n`;
     });
-
-    console.log(chalk.bold('\nBy Priority:'));
+    output += '\n';
+    
+    
+    output += chalk.bold.white('🔥 Task Priority') + '\n';
+    output += chalk.white('─'.repeat(80)) + '\n';
+    
+    
     tasksByPriority.forEach((count, priority) => {
       const percentage = totalTasks > 0 ? ((count / totalTasks) * 100).toFixed(1) : '0.0';
+      const barWidth = Math.round((count / totalTasks) * 40);
       const priorityColor = this.getPriorityColor(priority);
-      console.log(`${priorityColor(priority.padEnd(12))}: ${count} (${percentage}%)`);
+      const bar = '█'.repeat(barWidth);
+      output += `${priorityColor(priority.padEnd(12))}: ${count.toString().padStart(3)} (${percentage.padStart(4)}%) ${chalk.white(bar)}\n`;
     });
+    output += '\n';
+    
+    
+    if (topTags.length > 0) {
+      output += chalk.bold.white('🏷️ Top Tags') + '\n';
+      output += chalk.white('─'.repeat(80)) + '\n';
+      
+      topTags.forEach(([tag, count]) => {
+        const percentage = totalTasks > 0 ? ((count / totalTasks) * 100).toFixed(1) : '0.0';
+        output += `${chalk.cyan(tag.padEnd(15))}: ${count.toString().padStart(3)} (${percentage.padStart(4)}%)\n`;
+      });
+      output += '\n';
+    }
 
+    
     if (tasksNeedingAttention.length > 0) {
-      console.log(chalk.bold.yellow('\nTasks Needing Attention:'));
-      tasksNeedingAttention.forEach(task => {
+      output += chalk.bold.yellow('⚠️ Tasks Needing Attention') + '\n';
+      output += chalk.white('─'.repeat(80)) + '\n';
+      
+      tasksNeedingAttention.slice(0, 5).forEach((task, index) => {
         const statusColor = this.getStatusColor(task.status);
         const priorityColor = this.getPriorityColor(task.priority);
+        
+        output += `${index + 1}. ${chalk.bold.white(task.title)}\n`;
+        output += `   ID: ${chalk.gray(task.id)} | ${statusColor(task.status)} | ${priorityColor(task.priority)}\n`;
+        
+        
+        if (task.tags.length > 0) {
+          output += `   Tags: ${task.tags.map(tag => chalk.cyan(tag)).join(', ')}\n`;
+        }
+        
+        if (index < tasksNeedingAttention.length - 1) {
+          output += '\n';
+        }
+      });
+      
+      if (tasksNeedingAttention.length > 5) {
+        output += chalk.gray(`\n...and ${tasksNeedingAttention.length - 5} more tasks needing attention.\n`);
+      }
+      output += '\n';
+    }
 
-        console.log(`- ${chalk.bold(task.title)}`);
-        console.log(`  ID: ${task.id} | ${statusColor(task.status)} | ${priorityColor(task.priority)}`);
+    
+    if (recentTasks.length > 0) {
+      output += chalk.bold.white('🕒 Recent Activity') + '\n';
+      output += chalk.white('─'.repeat(80)) + '\n';
+      
+      recentTasks.forEach((task, index) => {
+        const statusColor = this.getStatusColor(task.status);
+        const date = new Date(task.updatedAt).toLocaleString();
+        
+        output += `${chalk.bold.white(task.title)} ${chalk.gray(`(${date})`)}\n`;
+        output += `   ID: ${chalk.gray(task.id)} | ${statusColor(task.status)} | Updated: ${task.updatedAt !== task.createdAt ? 'Yes' : 'No'}\n`;
+        
+        if (index < recentTasks.length - 1) {
+          output += '\n';
+        }
       });
     }
 
-    console.log();
+    return output;
   }
 
   private printTaskWithDependencies(
@@ -267,27 +416,86 @@ export class TaskVisualizer {
     return formattedTask;
   }
 
-  private formatTask(
+  private formatTaskEnhanced(
     task: Task, 
-    options: { showPriority: boolean; showComplexity: boolean }
+    options: { 
+      showPriority: boolean; 
+      showComplexity: boolean;
+      columnWidth: number;
+    }
   ): string {
-    const { showPriority, showComplexity } = options;
-
-    const statusColor = this.getStatusColor(task.status);
-    const priorityColor = this.getPriorityColor(task.priority);
-
-    let formattedTask = chalk.bold(task.title) + '\n';
-    formattedTask += `ID: ${task.id.substring(0, 8)}`;
-
+    const { showPriority, showComplexity, columnWidth } = options;
+    
+    
+    const maxTitleLength = columnWidth - 6;
+    
+    
+    let title = task.title;
+    if (title.length > maxTitleLength) {
+      title = title.substring(0, maxTitleLength - 3) + '...';
+    }
+    
+    
+    let taskDisplay = '';
+    
+    
     if (showPriority) {
-      formattedTask += ` | ${priorityColor(task.priority)}`;
+      taskDisplay += this.getPriorityIndicator(task.priority) + ' ';
     }
-
-    if (showComplexity) {
-      formattedTask += ` | Complexity: ${task.complexity}`;
+    
+    
+    taskDisplay += chalk.bold(title);
+    
+    
+    if (showComplexity && task.complexity) {
+      const complexityIndicator = this.getComplexityIndicator(task.complexity);
+      taskDisplay += ' ' + complexityIndicator;
     }
+    
+    
+    const shortId = task.id.split('-').pop() || task.id;
+    taskDisplay += ' ' + chalk.gray(`#${shortId}`);
+    
+    
+    if (taskDisplay.length > columnWidth) {
+      taskDisplay = taskDisplay.substring(0, columnWidth - 3) + '...';
+    } else {
+      taskDisplay = taskDisplay.padEnd(columnWidth);
+    }
+    
+    return taskDisplay;
+  }
 
-    return formattedTask;
+  private getPriorityIndicator(priority: TaskPriority): string {
+    switch (priority) {
+      case TaskPriority.CRITICAL:
+        return chalk.bgRed.white('!');
+      case TaskPriority.HIGH:
+        return chalk.red('●');
+      case TaskPriority.MEDIUM:
+        return chalk.yellow('●');
+      case TaskPriority.LOW:
+        return chalk.blue('●');
+      case TaskPriority.BACKLOG:
+        return chalk.gray('●');
+      default:
+        return ' ';
+    }
+  }
+
+  private getComplexityIndicator(complexity: number): string {
+    if (complexity <= 3) {
+      return chalk.green(`⦿${complexity}`);
+    } else if (complexity <= 6) {
+      return chalk.yellow(`⦿${complexity}`);
+    } else {
+      return chalk.red(`⦿${complexity}`);
+    }
+  }
+
+  private formatStatusText(status: TaskStatus): string {
+    const statusColor = this.getStatusColor(status);
+    return statusColor(status.toUpperCase());
   }
 
   private getStatusColor(status: TaskStatus): any {

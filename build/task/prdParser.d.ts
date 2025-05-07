@@ -10,6 +10,7 @@ export declare class PRDParser {
     private validateFileType;
     private readPRDFile;
     private preprocessContent;
+    private extractJsonFromText;
     private extractTasksFromPRD;
     private createTasksFromExtraction;
     private mapStringToPriority;

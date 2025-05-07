@@ -23,7 +23,6 @@ export async function getTaskHandler(taskManager, params) {
                 ]
             };
         }
-        // Format the response
         let notesFormatted = '';
         if (task.notes && task.notes.length > 0) {
             notesFormatted = '\n\n## Notes\n\n';

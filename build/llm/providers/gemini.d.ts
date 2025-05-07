@@ -11,6 +11,7 @@ export declare class GeminiProvider implements LLMProvider {
 export declare class GeminiClient implements LLMClient {
     private client;
     private model;
+    private maxRetries;
     constructor(model?: string);
     complete(options: LLMCompletionOptions): Promise<string>;
     getProviderName(): string;

@@ -39,21 +39,41 @@ const llmManager = new LLMManager();
 const contextManager = new ContextManager();
 const taskManager = new TaskManager(llmManager, contextManager);
 
-const InitializeTasksSchemaObject = z.object(InitializeTasksSchema);
-const HelpImplementTaskSchemaObject = z.object(HelpImplementTaskSchema);
 
-function setupTaskManager(filePath: string | undefined): TaskManager {
-    const effectivePath = filePath || path.join(process.cwd(), 'TASKS.md');
+const createTaskSchemaObject = z.object(CreateTaskSchema);
+const updateTaskSchemaObject = z.object(UpdateTaskSchema);
+const listTasksSchemaObject = z.object(ListTasksSchema);
+const getTaskSchemaObject = z.object(GetTaskSchema);
+const addTaskNoteSchemaObject = z.object(AddTaskNoteSchema);
+const getNextTaskSchemaObject = z.object(GetNextTaskSchema);
+const parsePrdSchemaObject = z.object(ParsePrdSchema);
+const deleteTaskSchemaObject = z.object(DeleteTaskSchema);
+const initializeTasksSchemaObject = z.object(InitializeTasksSchema);
+const generateImplementationStepsSchemaObject = z.object(GenerateImplementationStepsSchema);
+const expandTaskSchemaObject = z.object(ExpandTaskSchema);
+const suggestTaskImprovementsSchemaObject = z.object(SuggestTaskImprovementsSchema);
+const helpImplementTaskSchemaObject = z.object(HelpImplementTaskSchema);
+const visualizeTasksKanbanSchemaObject = z.object(VisualizeTasksKanbanSchema);
+const visualizeTasksDependencyTreeSchemaObject = z.object(VisualizeTasksDependencyTreeSchema);
+const visualizeTasksDashboardSchemaObject = z.object(VisualizeTasksDashboardSchema);
+const parsePrdFileSchemaObject = z.object(ParsePrdFileSchema);
+
+function setupTaskManager(filePath?: string): TaskManager {
+    const effectivePath = filePath 
+        ? path.resolve(process.cwd(), filePath) 
+        : path.resolve(process.cwd(), 'TASKS.md');
+    
     const projectName = path.basename(path.dirname(effectivePath));
-
     const dir = path.dirname(effectivePath);
+
     if (!fs.existsSync(dir)) {
         logger.info(`Creating directory for tasks file: ${dir}`);
         fs.mkdirSync(dir, { recursive: true });
     }
 
-    taskManager.setTasksFilePath(effectivePath, projectName);
+    taskManager.setTasksFilePath(effectivePath);
     logger.info(`TaskManager initialized with tasks file: ${taskManager.getTasksFilePath()}`);
+    
     return taskManager;
 }
 
@@ -74,7 +94,8 @@ type BaseArgs = {
 
 async function runCliCommand(
     handler: (tm: TaskManager, params: any) => Promise<any>,
-    args: BaseArgs & { _: (string | number)[] }
+    args: BaseArgs & { _: (string | number)[] },
+    schema?: z.ZodTypeAny
 ) {
     const tm = setupTaskManager(args.file);
     const handlerArgs = { ...args } as Record<string, any>;
@@ -84,7 +105,9 @@ async function runCliCommand(
     delete handlerArgs.serveMcp;
 
     try {
-        const result = await handler(tm, handlerArgs);
+        
+        const validatedParams = schema ? schema.parse(handlerArgs) : handlerArgs;
+        const result = await handler(tm, validatedParams);
         console.log(formatOutput(result));
     } catch (error: any) {
         logger.error(`CLI command failed: ${error.message}`, error);
@@ -114,7 +137,7 @@ async function runInitializeCliCommand(
             projectName: projectName,
             projectDescription: projectDescription
         };
-        const validatedParams = InitializeTasksSchemaObject.parse(params);
+        const validatedParams = initializeTasksSchemaObject.parse(params);
 
         const result = await initializeTasksHandler(tm, validatedParams);
         console.log(formatOutput(result));
@@ -156,23 +179,128 @@ Default Tasks file path: ${path.join(process.cwd(), 'TASKS.md')}
         version: packageInfo.version,
     });
 
-    server.tool("create-task", "Create a new task with details", CreateTaskSchema, (params) => createTaskHandler(tm, params));
-    server.tool("update-task", "Update an existing task's details", UpdateTaskSchema, (params) => updateTaskHandler(tm, params));
-    server.tool("list-tasks", "Get a list of tasks with filtering and sorting options", ListTasksSchema, (params) => listTasksHandler(tm, params));
-    server.tool("get-task", "Get details of a specific task", GetTaskSchema, (params) => getTaskHandler(tm, params));
-    server.tool("add-task-note", "Add a note, progress update, or comment to a task", AddTaskNoteSchema, (params) => addTaskNoteHandler(tm, params));
-    server.tool("get-next-task", "Get the next task to work on", GetNextTaskSchema, (params) => getNextTaskHandler(tm, params));
-    server.tool("parse-prd", "Parse a PRD (Product Requirements Document) and create tasks from it", ParsePrdSchema, (params) => parsePrdHandler(tm, params));
-    server.tool("delete-task", "Delete a task", DeleteTaskSchema, (params) => deleteTaskHandler(tm, params));
-    server.tool("initialize-tasks", "Initialize the task management system and create TASKS.md", InitializeTasksSchema, (params) => initializeTasksHandler(tm, params));
-    server.tool("generate-implementation-steps", "Generate detailed implementation steps for a task", GenerateImplementationStepsSchema, (params) => generateImplementationStepsHandler(tm, params));
-    server.tool("expand-task", "Expand a task with more detailed information and subtasks", ExpandTaskSchema, (params) => expandTaskHandler(tm, params));
-    server.tool("suggest-task-improvements", "Get AI suggestions for improving a task", SuggestTaskImprovementsSchema, (params) => suggestTaskImprovementsHandler(tm, params));
-    server.tool("help-implement-task", "Get AI assistance to implement a specific task", HelpImplementTaskSchema, (params) => helpImplementTaskHandler(tm, llmManager, contextManager, params));
-    server.tool("visualize-tasks-kanban", "Display tasks in a Kanban board view", VisualizeTasksKanbanSchema, (params) => visualizeTasksKanbanHandler(tm, params));
-    server.tool("visualize-tasks-dependency-tree", "Display task dependency tree", VisualizeTasksDependencyTreeSchema, (params) => visualizeTasksDependencyTreeHandler(tm, params));
-    server.tool("visualize-tasks-dashboard", "Display task dashboard with summary statistics", VisualizeTasksDashboardSchema, (params) => visualizeTasksDashboardHandler(tm, params));
-    server.tool("parse-prd-file", "Parse a PRD file from disk and extract tasks", ParsePrdFileSchema, (params) => parsePrdFileHandler(tm, params));
+    
+    server.tool(
+        "create-task", 
+        "Create a new task with details", 
+        CreateTaskSchema, 
+        async (params) => {
+            
+            return createTaskHandler(tm, params);
+        }
+    );
+    
+    server.tool(
+        "update-task", 
+        "Update an existing task's details", 
+        UpdateTaskSchema, 
+        async (params) => updateTaskHandler(tm, params)
+    );
+    
+    server.tool(
+        "list-tasks", 
+        "Get a list of tasks with filtering and sorting options", 
+        ListTasksSchema, 
+        async (params) => listTasksHandler(tm, params)
+    );
+    
+    server.tool(
+        "get-task", 
+        "Get details of a specific task", 
+        GetTaskSchema, 
+        async (params) => getTaskHandler(tm, params)
+    );
+    
+    server.tool(
+        "add-task-note", 
+        "Add a note, progress update, or comment to a task", 
+        AddTaskNoteSchema, 
+        async (params) => addTaskNoteHandler(tm, params)
+    );
+    
+    server.tool(
+        "get-next-task", 
+        "Get the next task to work on", 
+        GetNextTaskSchema, 
+        async (params) => getNextTaskHandler(tm, params)
+    );
+    
+    server.tool(
+        "parse-prd", 
+        "Parse a PRD (Product Requirements Document) and create tasks from it", 
+        ParsePrdSchema, 
+        async (params) => parsePrdHandler(tm, params)
+    );
+    
+    server.tool(
+        "delete-task", 
+        "Delete a task", 
+        DeleteTaskSchema, 
+        async (params) => deleteTaskHandler(tm, params)
+    );
+    
+    server.tool(
+        "initialize-tasks", 
+        "Initialize the task management system and create TASKS.md", 
+        InitializeTasksSchema, 
+        async (params) => initializeTasksHandler(tm, params)
+    );
+    
+    server.tool(
+        "generate-implementation-steps", 
+        "Generate detailed implementation steps for a task", 
+        GenerateImplementationStepsSchema, 
+        async (params) => generateImplementationStepsHandler(tm, params)
+    );
+    
+    server.tool(
+        "expand-task", 
+        "Expand a task with more detailed information and subtasks", 
+        ExpandTaskSchema, 
+        async (params) => expandTaskHandler(tm, params)
+    );
+    
+    server.tool(
+        "suggest-task-improvements", 
+        "Get AI suggestions for improving a task", 
+        SuggestTaskImprovementsSchema, 
+        async (params) => suggestTaskImprovementsHandler(tm, params)
+    );
+    
+    server.tool(
+        "help-implement-task", 
+        "Get AI assistance to implement a specific task", 
+        HelpImplementTaskSchema, 
+        async (params) => helpImplementTaskHandler(tm, llmManager, contextManager, params)
+    );
+    
+    server.tool(
+        "visualize-tasks-kanban", 
+        "Display tasks in a Kanban board view", 
+        VisualizeTasksKanbanSchema, 
+        async (params) => visualizeTasksKanbanHandler(tm, params)
+    );
+    
+    server.tool(
+        "visualize-tasks-dependency-tree", 
+        "Display task dependency tree", 
+        VisualizeTasksDependencyTreeSchema, 
+        async (params) => visualizeTasksDependencyTreeHandler(tm, params)
+    );
+    
+    server.tool(
+        "visualize-tasks-dashboard", 
+        "Display task dashboard with summary statistics", 
+        VisualizeTasksDashboardSchema, 
+        async (params) => visualizeTasksDashboardHandler(tm, params)
+    );
+    
+    server.tool(
+        "parse-prd-file", 
+        "Parse a PRD file from disk and extract tasks", 
+        ParsePrdFileSchema, 
+        async (params) => parsePrdFileHandler(tm, params)
+    );
 
     function isLLMAvailable(): boolean {
         try {
@@ -232,7 +360,7 @@ async function main() {
                 .option('complexity', { type: 'number', desc: 'Complexity score (1-10)' })
                 .option('dependencies', { type: 'array', string: true, desc: 'List of task IDs this task depends on' })
             ,
-            (argv) => runCliCommand(createTaskHandler, argv)
+            (argv) => runCliCommand(createTaskHandler, argv, createTaskSchemaObject)
         )
          .command(
             'update <id>',
@@ -249,7 +377,7 @@ async function main() {
                 .option('complexity', { type: 'number', desc: 'New complexity score' })
                 .option('dependencies', { type: 'array', string: true, desc: 'Replace dependencies' })
             ,
-             (argv) => runCliCommand(updateTaskHandler, argv)
+             (argv) => runCliCommand(updateTaskHandler, argv, updateTaskSchemaObject)
         )
         .command(
             'list',
@@ -261,13 +389,13 @@ async function main() {
                 .option('sortBy', { choices: ['priority', 'dueDate', 'createdAt', 'updatedAt', 'complexity'], desc: 'Field to sort by' })
                 .option('sortDirection', { choices: ['asc', 'desc'], default: 'asc', desc: 'Sort direction' })
             ,
-             (argv) => runCliCommand(listTasksHandler, argv)
+             (argv) => runCliCommand(listTasksHandler, argv, listTasksSchemaObject)
         )
         .command(
             'get <id>',
             'Get details of a specific task',
             (y: Argv<BaseArgs>) => y.positional('id', { type: 'string', demandOption: true, desc: 'ID of the task' }),
-             (argv) => runCliCommand(getTaskHandler, argv)
+             (argv) => runCliCommand(getTaskHandler, argv, getTaskSchemaObject)
         )
         .command(
             'add-note <taskId>',
@@ -278,13 +406,13 @@ async function main() {
                 .option('author', { type: 'string', demandOption: true, desc: 'Author of the note' })
                 .option('type', { choices: ['progress', 'comment', 'blocker', 'solution'], default: 'comment', desc: 'Type of note' })
             ,
-             (argv) => runCliCommand(addTaskNoteHandler, argv)
+             (argv) => runCliCommand(addTaskNoteHandler, argv, addTaskNoteSchemaObject)
         )
         .command(
             'next',
             'Get the next task to work on (simple logic)',
              (y: Argv<BaseArgs>) => y.option('random_string', { type: 'string', default: 'dummy', hidden: true }),
-             (argv) => runCliCommand(getNextTaskHandler, argv)
+             (argv) => runCliCommand(getNextTaskHandler, argv, getNextTaskSchemaObject)
         )
          .command(
             'parse-prd',
@@ -293,7 +421,7 @@ async function main() {
                  .option('prdContent', { type: 'string', demandOption: true, desc: 'The PRD content as a string' })
                  .option('createTasksFile', { type: 'boolean', default: true, desc: 'Create/update the TASKS.md file' })
             ,
-            (argv) => runCliCommand(parsePrdHandler, argv)
+            (argv) => runCliCommand(parsePrdHandler, argv, parsePrdSchemaObject)
         )
          .command(
             'parse-prd-file <filePath>',
@@ -303,19 +431,19 @@ async function main() {
                  .option('createTasksFile', { type: 'boolean', default: true, desc: 'Create/update the TASKS.md file' })
                  .option('verbose', { type: 'boolean', default: false, desc: 'Show detailed output' })
              ,
-             (argv) => runCliCommand(parsePrdFileHandler, argv)
+             (argv) => runCliCommand(parsePrdFileHandler, argv, parsePrdFileSchemaObject)
         )
         .command(
             'delete <id>',
             'Delete a task',
              (y: Argv<BaseArgs>) => y.positional('id', { type: 'string', demandOption: true, desc: 'ID of the task to delete' }),
-             (argv) => runCliCommand(deleteTaskHandler, argv)
+             (argv) => runCliCommand(deleteTaskHandler, argv, deleteTaskSchemaObject)
         )
         .command(
             'generate-steps <taskId>',
             'Generate implementation steps for a task',
              (y: Argv<BaseArgs>) => y.positional('taskId', { type: 'string', demandOption: true, desc: 'ID of the task' }),
-             (argv) => runCliCommand(generateImplementationStepsHandler, argv)
+             (argv) => runCliCommand(generateImplementationStepsHandler, argv, generateImplementationStepsSchemaObject)
         )
         .command(
             'expand <taskId>',
@@ -324,13 +452,13 @@ async function main() {
                 .positional('taskId', { type: 'string', demandOption: true, desc: 'ID of the task' })
                 .option('expansionPrompt', { type: 'string', desc: 'Additional context for expansion' })
             ,
-            (argv) => runCliCommand(expandTaskHandler, argv)
+            (argv) => runCliCommand(expandTaskHandler, argv, expandTaskSchemaObject)
         )
         .command(
             'suggest-improvements <taskId>',
             'Suggest improvements for a task',
              (y: Argv<BaseArgs>) => y.positional('taskId', { type: 'string', demandOption: true, desc: 'ID of the task' }),
-             (argv) => runCliCommand(suggestTaskImprovementsHandler, argv)
+             (argv) => runCliCommand(suggestTaskImprovementsHandler, argv, suggestTaskImprovementsSchemaObject)
         )
          .command(
             'help-implement <taskId>',
@@ -349,7 +477,7 @@ async function main() {
                  delete handlerArgs.serveMcp;
                  try {
 
-                     const validatedParams = HelpImplementTaskSchemaObject.parse(handlerArgs);
+                     const validatedParams = helpImplementTaskSchemaObject.parse(handlerArgs);
                      const result = await helpImplementTaskHandler(tm, llmManager, contextManager, validatedParams);
                      console.log(formatOutput(result));
                  } catch (error: any) {
@@ -369,19 +497,19 @@ async function main() {
                 .option('showPriority', { type: 'boolean', default: true, desc: 'Show priority indicators' })
                 .option('showComplexity', { type: 'boolean', default: true, desc: 'Show complexity indicators' })
             ,
-             (argv) => runCliCommand(visualizeTasksKanbanHandler, argv)
+             (argv) => runCliCommand(visualizeTasksKanbanHandler, argv, visualizeTasksKanbanSchemaObject)
         )
         .command(
             'tree [taskId]',
             'Display task dependency tree',
              (y: Argv<BaseArgs>) => y.positional('taskId', { type: 'string', desc: 'ID of the task to focus on (optional)' }),
-             (argv) => runCliCommand(visualizeTasksDependencyTreeHandler, argv)
+             (argv) => runCliCommand(visualizeTasksDependencyTreeHandler, argv, visualizeTasksDependencyTreeSchemaObject)
         )
         .command(
             'dashboard',
             'Display task dashboard',
              (y: Argv<BaseArgs>) => y.option('random_string', { type: 'string', default: 'dummy', hidden: true }),
-             (argv) => runCliCommand(visualizeTasksDashboardHandler, argv)
+             (argv) => runCliCommand(visualizeTasksDashboardHandler, argv, visualizeTasksDashboardSchemaObject)
         )
         .demandCommand(0, 'Please specify a command or use --serve-mcp to start the server.')
         .strict()
@@ -413,8 +541,3 @@ main().catch(err => {
     console.error('An unexpected error occurred:', err);
     process.exit(1);
 });
-
-const buildDir = path.join(process.cwd(), 'build');
-if (!fs.existsSync(buildDir)) {
-    fs.mkdirSync(buildDir, { recursive: true });
-}

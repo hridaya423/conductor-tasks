@@ -5,9 +5,24 @@ export declare const CreateTaskSchema: {
     description: z.ZodString;
     additionalContext: z.ZodOptional<z.ZodString>;
 };
-export declare function createTaskHandler(taskManager: TaskManager, params: z.infer<z.ZodObject<typeof CreateTaskSchema>>): Promise<{
+declare const createTaskSchemaObject: z.ZodObject<{
+    title: z.ZodString;
+    description: z.ZodString;
+    additionalContext: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    description: string;
+    title: string;
+    additionalContext?: string | undefined;
+}, {
+    description: string;
+    title: string;
+    additionalContext?: string | undefined;
+}>;
+export type CreateTaskParams = z.infer<typeof createTaskSchemaObject>;
+export declare function createTaskHandler(taskManager: TaskManager, params: CreateTaskParams): Promise<{
     content: {
         type: "text";
         text: string;
     }[];
 }>;
+export {};

@@ -1,4 +1,5 @@
-import { TaskManager, TaskPriority } from '../taskManager.js';
+import { TaskManager } from './taskManager.js';
+import { TaskPriority } from '../core/types.js';
 export declare class TaskVisualizer {
     private taskManager;
     constructor(taskManager: TaskManager);
@@ -8,12 +9,15 @@ export declare class TaskVisualizer {
         filterPriority?: TaskPriority;
         filterTag?: string;
         compact?: boolean;
-    }): void;
+    }): string;
     displayDependencyTree(rootTaskId?: string): void;
-    displayDashboard(): void;
+    displayDashboard(): string;
     private printTaskWithDependencies;
     private formatTaskCompact;
-    private formatTask;
+    private formatTaskEnhanced;
+    private getPriorityIndicator;
+    private getComplexityIndicator;
+    private formatStatusText;
     private getStatusColor;
     private getPriorityColor;
     private padCenter;

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { TaskPriority } from '../taskManager.js';
+import { TaskPriority } from '../core/types.js';
 import { TaskVisualizer } from '../task/visualizer.js';
 import chalk from 'chalk';
 export function createVisualizeTasksCommand(taskManager) {

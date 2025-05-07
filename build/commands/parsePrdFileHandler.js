@@ -13,16 +13,30 @@ export async function parsePrdFileHandler(taskManager, params) {
     try {
         const { filePath, createTasksFile, verbose } = params;
         logger.info(`Parsing PRD file: ${filePath}`, { createTasksFile, verbose });
+        const resolvedPath = path.resolve(filePath);
+        logger.info(`Using resolved PRD file path: ${resolvedPath}`);
         const notInitialized = checkTaskManagerInitialized(taskManager);
         if (notInitialized && createTasksFile) {
-            const defaultPath = path.join(process.cwd(), 'TASKS.md');
-            await taskManager.initialize("PRD Project", "Project initialized from PRD parsing", defaultPath);
+            let workspaceRoot;
+            if (process.env.WORKSPACE_FOLDER_PATHS) {
+                const paths = process.env.WORKSPACE_FOLDER_PATHS.split(';');
+                if (paths.length > 0 && paths[0]) {
+                    workspaceRoot = paths[0];
+                    logger.info(`Using workspace path from WORKSPACE_FOLDER_PATHS: ${workspaceRoot}`);
+                }
+            }
+            if (!workspaceRoot) {
+                workspaceRoot = path.dirname(resolvedPath);
+                logger.info(`No workspace path found, using PRD file directory: ${workspaceRoot}`);
+            }
+            const tasksFilePath = path.join(workspaceRoot, 'TASKS.md');
+            logger.info(`Initializing task system at ${tasksFilePath}`);
+            await taskManager.initialize("PRD Project", "Project initialized from PRD parsing", tasksFilePath);
             logger.info("Task system automatically initialized for PRD file parsing");
         }
         else if (notInitialized) {
             return notInitialized;
         }
-        const resolvedPath = path.resolve(filePath);
         if (!fs.existsSync(resolvedPath)) {
             logger.error(`PRD file not found: ${resolvedPath}`);
             return {
@@ -34,10 +48,12 @@ export async function parsePrdFileHandler(taskManager, params) {
                 ]
             };
         }
+        logger.info(`Reading PRD file content from: ${resolvedPath}`);
         const prdContent = fs.readFileSync(resolvedPath, 'utf8');
+        logger.info(`Sending PRD content to LLM for parsing (${prdContent.length} characters)`);
         const taskIds = await taskManager.parsePRD(prdContent);
         if (taskIds.length === 0) {
-            logger.warn(`No tasks extracted from PRD file: ${filePath}`);
+            logger.warn(`No tasks extracted from PRD file: ${resolvedPath}`);
             return {
                 content: [
                     {
@@ -47,9 +63,14 @@ export async function parsePrdFileHandler(taskManager, params) {
                 ]
             };
         }
-        logger.info(`Extracted ${taskIds.length} tasks from PRD file: ${filePath}`);
-        const tasks = taskIds.map(id => taskManager.getTask(id)).filter(Boolean);
-        // Format response (same as original)
+        logger.info(`Extracted ${taskIds.length} tasks from PRD file: ${resolvedPath}`);
+        const tasks = [];
+        for (const id of taskIds) {
+            const task = taskManager.getTask(id);
+            if (task) {
+                tasks.push(task);
+            }
+        }
         let taskListText = `# Tasks Created from PRD File\n\n`;
         taskListText += `File: ${resolvedPath}\n`;
         taskListText += `Total tasks: ${tasks.length}\n\n`;

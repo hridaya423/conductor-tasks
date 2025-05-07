@@ -8,7 +8,6 @@ export const ListTasksSchema = {
     sortBy: z.enum(["priority", "dueDate", "createdAt", "updatedAt", "complexity"]).optional().describe("Field to sort by"),
     sortDirection: z.enum(["asc", "desc"]).optional().describe("Sort direction")
 };
-// Re-use or move this function to a shared utility
 function checkTaskManagerInitialized(taskManager) {
     if (taskManager.isInitialized() || taskManager.getTaskCount() > 0) {
         taskManager.reloadTasks();
@@ -91,7 +90,6 @@ export async function listTasksHandler(taskManager, params) {
                 ]
             };
         }
-        // Format the response
         let response = `# Tasks (${tasks.length})\n\n`;
         tasks.forEach(task => {
             const progress = taskManager.calculateTaskProgress(task.id);

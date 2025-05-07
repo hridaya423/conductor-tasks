@@ -13,7 +13,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
         const { taskId } = params;
         logger.info('Visualizing task dependency tree', { taskId });
         const allTasks = taskManager.getTasks({});
-        // Build Tree for all root tasks if no specific taskId
         if (!taskId) {
             const rootTasks = allTasks.filter(task => !task.parent);
             if (rootTasks.length === 0) {
@@ -28,7 +27,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
                 };
             }
             let dependencyTree = "# Task Dependency Tree\n\n";
-            // Helper function to build the tree recursively
             function buildTree(task, depth = 0) {
                 const indent = '  '.repeat(depth);
                 const statusSymbol = task.status === TaskStatus.DONE ? '✓' : ' ';
@@ -53,7 +51,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
                 ]
             };
         }
-        // Build tree for a specific task and its context
         else {
             const task = taskManager.getTask(taskId);
             if (!task) {
@@ -68,7 +65,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
                 };
             }
             let dependencyTree = `# Dependency Tree for "${task.title}"\n\n`;
-            // Find the ultimate root parent
             let rootTask = task;
             let currentParentId = task.parent;
             const parentChain = [];
@@ -80,7 +76,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
                 rootTask = parent;
                 currentParentId = parent.parent;
             }
-            // Display parent chain if any
             if (parentChain.length > 0) {
                 dependencyTree += "## Parent Chain\n\n";
                 parentChain.forEach((parent, index) => {
@@ -88,7 +83,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
                 });
                 dependencyTree += `${'  '.repeat(parentChain.length)}- ${task.title} (${task.id}) <- Current Task\n\n`;
             }
-            // Helper function to build the subtask tree recursively
             function buildSubtasksTree(currentTaskId, depth = 0) {
                 const subtasks = allTasks.filter(t => t.parent === currentTaskId);
                 if (subtasks.length === 0)
@@ -96,7 +90,6 @@ export async function visualizeTasksDependencyTreeHandler(taskManager, params) {
                 let result = '';
                 for (const subtask of subtasks) {
                     const statusSymbol = subtask.status === TaskStatus.DONE ? '✓' : ' ';
-                    // Indent based on depth relative to the *initial* task for subtask section
                     const relativeDepth = parentChain.length + depth + (parentChain.length > 0 ? 1 : 0);
                     result += `${'  '.repeat(relativeDepth)}- [${statusSymbol}] ${subtask.title} (${subtask.id})\n`;
                     result += buildSubtasksTree(subtask.id, depth + 1);

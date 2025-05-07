@@ -1,6 +1,7 @@
 export interface LLMProviderConfig {
     apiKey: string;
     model: string;
+    baseUrl?: string;
     temperature?: number;
     maxTokens?: number;
     topP?: number;

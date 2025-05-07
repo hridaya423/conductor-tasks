@@ -5,6 +5,7 @@ import { LLMClient } from '../core/types.js';
 import { ErrorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../core/errorHandler.js';
 import { TaskPriority, TaskStatus } from '../core/types.js';
 import { z } from 'zod';
+import { JsonUtils } from '../core/jsonUtils.js';
 
 const errorHandler = ErrorHandler.getInstance();
 
@@ -115,9 +116,7 @@ export class PRDParser {
   }
 
   private preprocessContent(content: string): string {
-
     let processed = content.replace(/\s+/g, ' ');
-
     processed = processed.replace(/#{1,6}\s+/g, '');
 
     if (processed.length < 100) {
@@ -134,117 +133,161 @@ export class PRDParser {
     return processed;
   }
 
-  private async extractTasksFromPRD(prdContent: string): Promise<ExtractedTask[]> {
+  private extractJsonFromText(text: string): any {
+    try {
+      
+      const jsonArray = JsonUtils.extractJsonArray(text, false);
+      if (jsonArray !== null) {
+        return jsonArray;
+      }
+      
+      
+      throw new Error(`Could not extract valid JSON array from response after multiple attempts`);
+    } catch (sanitizeError) {
+      throw new Error(`Failed to extract JSON from response: ${sanitizeError instanceof Error ? sanitizeError.message : 'Unknown error'}`);
+    }
+  }
 
+  private async extractTasksFromPRD(prdContent: string): Promise<ExtractedTask[]> {
     const processedContent = this.preprocessContent(prdContent);
 
-    const prompt = `
-You are an expert project manager and developer tasked with breaking down a Product Requirements Document (PRD) into concrete, actionable implementation tasks.
+    const systemPrompt = `CRITICAL: You are a pure JSON response system that creates tasks from project requirements documents.
+Your ONLY output must be a valid JSON array containing task objects - NOTHING else.
+ANY text outside the JSON array will cause system failure.
+DO NOT use markdown code blocks, explanations, prefixes, or any non-JSON text.
+The first character of your response must be '[' and the last character must be ']'.`;
+
+    const prompt = `PURE JSON RESPONSE REQUIRED: Convert this PRD into tasks as a JSON array.
 
 Here's the PRD:
 ---
 ${processedContent}
 ---
 
-Based on the PRD, identify a complete set of implementation tasks required to build this product. Each task should be:
-1. Specific and actionable
-2. At an appropriate level of granularity (not too broad, not too detailed)
-3. Described clearly enough that a developer could understand what needs to be done
+===== RESPONSE FORMAT REQUIREMENTS =====
+1. Your ENTIRE response must be ONLY a valid JSON array
+2. NO text, explanations, or comments before or after the JSON
+3. NO markdown formatting, backticks, or code blocks
+4. FIRST response character MUST be '['
+5. LAST response character MUST be ']'
+6. NEVER include "Here is the JSON:" or any similar prefix text
 
-For each task, provide:
-- A clear, concise title (3-10 words)
-- A detailed description (2-5 sentences explaining exactly what needs to be implemented)
-- An appropriate priority level (critical, high, medium, low, or backlog)
-- A complexity rating from 1-10 (10 being most complex)
-- Tags for categorization (e.g., "frontend", "backend", "database", "auth", etc.)
-- Dependencies (list any task titles that must be completed before this task can start)
+Task object schema:
+{
+  "title": "Short descriptive task title (3-150 chars)",
+  "description": "Detailed implementation description (10+ chars)",
+  "priority": "critical|high|medium|low|backlog",
+  "complexity": Integer from 1-10,
+  "dependencies": ["ids", "of", "prerequisite", "tasks"],
+  "tags": ["relevant", "tags"]
+}
 
-Format your response as a valid JSON array of task objects with these exact fields:
-[
-  {
-    "title": "string",
-    "description": "string",
-    "priority": "critical|high|medium|low|backlog",
-    "complexity": number,
-    "dependencies": ["string"],
-    "tags": ["string"]
-  }
-]
+Example of CORRECT response format:
+[{"title":"Task 1","description":"Description 1","priority":"high","complexity":5,"dependencies":[],"tags":["frontend"]},{"title":"Task 2","description":"Description 2","priority":"medium","complexity":3,"dependencies":["Task 1"],"tags":["backend"]}]
 
-Return ONLY the JSON array with no additional text or explanation. Ensure the JSON is properly formatted and valid.
-`;
+TECHNICAL REQUIREMENT: Your response must be valid JSON parseable by JavaScript's JSON.parse() function.
+ANY characters outside the JSON array will cause a system crash.`;
 
     let retryCount = 0;
     let lastError: Error | null = null;
 
     while (retryCount <= this.maxRetries) {
       try {
-
         if (retryCount > 0) {
           const backoffMs = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
 
-          errorHandler.handleError(
-            new TaskError(
-              `Retrying PRD parsing (attempt ${retryCount}/${this.maxRetries})`,
-              ErrorCategory.PARSING,
-              ErrorSeverity.WARNING,
-              { operation: 'extractTasksFromPRD', additionalInfo: { retryCount } }
-            ),
-            true
-          );
+          const retrySystemPrompt = `${systemPrompt}\n\nCRITICAL REMINDER: Your previous response had formatting issues. You MUST output ONLY the JSON array with NO other text. Start with '[' and end with ']'. No explanations or code blocks.`;
         }
 
         const response = await this.llmClient.complete({
           prompt: prompt,
-
+          systemPrompt: systemPrompt,
           maxTokens: 4000,
-          temperature: 0.2, 
+          temperature: 0.01, 
         });
 
-        const jsonMatch = response.match(/\[\s*\{[\s\S]*\}\s*\]/);
-        if (!jsonMatch) {
-          throw new Error("Could not extract valid JSON from LLM response");
+        
+        let tasksData;
+        try {
+          tasksData = this.extractJsonFromText(response);
+          
+          if (!tasksData || !Array.isArray(tasksData) || tasksData.length === 0) {
+            throw new Error('Extracted data is not a valid non-empty array');
+          }
+        } catch (jsonError) {
+          const errorMsg = `Failed to extract JSON: ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}`;
+          errorHandler.handleError(
+            new TaskError(
+              errorMsg,
+              ErrorCategory.PARSING,
+              ErrorSeverity.ERROR,
+              { operation: 'extractTasksFromPRD' },
+              jsonError instanceof Error ? jsonError : undefined
+            )
+          );
+          
+          if (retryCount < this.maxRetries) {
+            retryCount++;
+            continue;
+          }
+          
+          throw new Error(errorMsg);
         }
 
-        const jsonText = jsonMatch[0];
-
+        
         try {
+          
+          const validatedTasks = ExtractedTasksSchema.parse(tasksData);
+          return validatedTasks;
+        } catch (validationError) {
+          errorHandler.handleError(
+            new TaskError(
+              `Task validation error: ${validationError instanceof Error ? validationError.message : 'Unknown error'}`,
+              ErrorCategory.VALIDATION,
+              ErrorSeverity.ERROR,
+              { operation: 'extractTasksFromPRD' },
+              validationError instanceof Error ? validationError : undefined
+            )
+          );
 
-          const parsedTasks = JSON.parse(jsonText);
-          const validationResult = ExtractedTasksSchema.safeParse(parsedTasks);
-
-          if (!validationResult.success) {
-            throw new Error(`Invalid task format: ${validationResult.error.message}`);
+          if (retryCount < this.maxRetries) {
+            retryCount++;
+            continue;
           }
 
-          return validationResult.data;
-        } catch (parseError) {
-          throw new Error(`Failed to parse JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          throw new Error(`Task validation failed: ${validationError instanceof Error ? validationError.message : 'Unknown error'}`);
         }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+
+        
+        errorHandler.handleError(
+          new TaskError(
+            `Error during PRD parsing (attempt ${retryCount + 1}/${this.maxRetries + 1}): ${error instanceof Error ? error.message : String(error)}`,
+            ErrorCategory.PARSING,
+            ErrorSeverity.ERROR,
+            { operation: 'extractTasksFromPRD', additionalInfo: { retryCount } },
+            error instanceof Error ? error : undefined
+          )
+        );
 
         if (retryCount < this.maxRetries) {
           retryCount++;
           continue;
         }
 
-        errorHandler.handleError(
-          new TaskError(
-            `Failed to extract tasks from PRD after ${retryCount} retries: ${lastError.message}`,
-            ErrorCategory.PARSING,
-            ErrorSeverity.ERROR,
-            { operation: 'extractTasksFromPRD' },
-            lastError
-          )
-        );
-
-        return [];
+        
+        if (lastError) {
+          throw lastError;
+        } else {
+          throw new Error('Failed to extract tasks from PRD after multiple attempts');
+        }
       }
     }
 
-    return [];
+    
+    throw new Error('Unreachable code: all PRD parsing attempts failed');
   }
 
   private createTasksFromExtraction(extractedTasks: ExtractedTask[]): string[] {

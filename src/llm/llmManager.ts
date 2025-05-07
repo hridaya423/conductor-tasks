@@ -5,14 +5,17 @@ import { GroqClient } from './providers/groq.js';
 import { MistralClient } from './providers/mistral.js';
 import { GeminiClient } from './providers/gemini.js';
 import { XaiClient } from './providers/xai.js';
-import { MixtralProvider } from './providers/mixtral.js';
+import { MistralProvider } from './providers/mistral.js';
+import { OllamaClient } from './providers/ollama.js';
+import { PerplexityClient } from './providers/perplexity.js';
 import { ErrorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../core/errorHandler.js';
+import { refinePrompt } from '../core/promptRefinementService.js';
 
 const errorHandler = ErrorHandler.getInstance();
 
 const PROVIDER_DEFAULTS = {
   anthropic: {
-    model: 'claude-3-opus-20240229',
+    model: 'claude-3.7-sonnet-20240607',
     temperature: 0.7,
     maxTokens: 4000
   },
@@ -22,7 +25,7 @@ const PROVIDER_DEFAULTS = {
     maxTokens: 4000
   },
   groq: {
-    model: 'llama-3-70b-8192',
+    model: 'llama-3.3-70b-versatile',
     temperature: 0.7,
     maxTokens: 4000
   },
@@ -45,16 +48,28 @@ const PROVIDER_DEFAULTS = {
     model: 'mixtral-8x7b-32768',
     temperature: 0.7,
     maxTokens: 4000
+  },
+  ollama: {
+    model: 'llama3',
+    temperature: 0.7,
+    maxTokens: 4000
+  },
+  perplexity: {
+    model: 'llama-3-sonar-medium-32k-online',
+    temperature: 0.7,
+    maxTokens: 4000
   }
 };
 
 const FALLBACK_ORDER = [
   'anthropic',
+  'gemini',
   'openai',
   'groq',
   'mistral',
-  'gemini',
   'mixtral',
+  'ollama',
+  'perplexity',
   'xai'
 ];
 
@@ -91,22 +106,45 @@ export class LLMManager {
     };
 
     Object.keys(this.globalConfig).forEach(key => {
-      if (this.globalConfig[key as keyof LLMProviderConfig] === undefined) {
-        delete this.globalConfig[key as keyof LLMProviderConfig];
+      const configKey = key as keyof LLMProviderConfig;
+      if (this.globalConfig[configKey] === undefined) {
+        delete this.globalConfig[configKey];
       }
     });
+
+    this.maxRetries = process.env.LLM_MAX_RETRIES 
+      ? Math.min(Math.max(parseInt(process.env.LLM_MAX_RETRIES, 10), 0), 10)
+      : 3;
+    
+    this.maxProviderAttempts = process.env.LLM_MAX_PROVIDER_ATTEMPTS
+      ? Math.min(Math.max(parseInt(process.env.LLM_MAX_PROVIDER_ATTEMPTS, 10), 1), 5)
+      : 3;
 
     if (process.env.DEFAULT_LLM_PROVIDER) {
       const providerName = process.env.DEFAULT_LLM_PROVIDER.toLowerCase();
       if (this.providers.has(providerName)) {
         this.defaultProvider = providerName;
+      } else {
+        console.warn(`WARNING: Specified default LLM provider "${providerName}" is not available. Using fallback providers: ${FALLBACK_ORDER.join(', ')}`);
+      }
+    }
+
+    if (!this.defaultProvider || !this.providers.has(this.defaultProvider)) {
+      for (const provider of FALLBACK_ORDER) {
+        if (this.providers.has(provider)) {
+          this.defaultProvider = provider;
+          break;
+        }
+      }
+      
+      if (!this.defaultProvider) {
+        console.error("ERROR: No LLM providers available. Make sure at least one provider is configured.");
       }
     }
   }
 
   private initializeProviders() {
     try {
-
       this.providers.clear();
 
       const anthropicKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
@@ -135,7 +173,7 @@ export class LLMManager {
 
       const mixtralKey = process.env.MIXTRAL_API_KEY;
       if (mixtralKey) {
-        const provider = new MixtralProvider({
+        const provider = new MistralProvider({
           apiKey: mixtralKey,
           model: PROVIDER_DEFAULTS.mixtral.model,
           temperature: PROVIDER_DEFAULTS.mixtral.temperature,
@@ -155,12 +193,30 @@ export class LLMManager {
         const client = new XaiClient();
         this.providers.set('xai', { client });
       }
+      
+      if (process.env.OLLAMA_ENABLED === 'true' || process.env.OLLAMA_API_KEY) {
+        try {
+          const client = new OllamaClient();
+          this.providers.set('ollama', { client });
+        } catch (error) {
+          console.warn(`Warning: Failed to initialize Ollama provider: ${error}`);
+        }
+      }
+      
+      const perplexityKey = process.env.PERPLEXITY_API_KEY;
+      if (perplexityKey) {
+        try {
+          const client = new PerplexityClient();
+          this.providers.set('perplexity', { client });
+        } catch (error) {
+          console.warn(`Warning: Failed to initialize Perplexity provider: ${error}`);
+        }
+      }
 
       if (this.providers.size > 0 && !this.providers.has(this.defaultProvider)) {
         this.defaultProvider = Array.from(this.providers.keys())[0];
       }
     } catch (error) {
-
       errorHandler.handleError(new TaskError(
         `Error initializing LLM providers: ${error instanceof Error ? error.message : String(error)}`,
         ErrorCategory.LLM,
@@ -453,5 +509,14 @@ export class LLMManager {
         this.processQueue();
       }
     });
+  }
+
+  
+  async refinePrompt(
+    originalPrompt: string,
+    failedResponse: string,
+    desiredSpecification: string
+  ): Promise<string> {
+    return refinePrompt(this, originalPrompt, failedResponse, desiredSpecification);
   }
 }

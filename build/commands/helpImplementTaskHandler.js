@@ -25,7 +25,6 @@ export async function helpImplementTaskHandler(taskManager, llmManager, contextM
                 ]
             };
         }
-        // Reuse logic from index.ts
         let implementationPlan = task.notes.find(note => note.type === 'solution')?.content;
         if (!implementationPlan) {
             logger.info(`No existing implementation plan found for ${taskId}, generating one.`);
@@ -86,7 +85,6 @@ Based *only* on the information provided above, provide concrete and actionable 
 `;
         const result = await llmManager.sendRequest({ prompt: implementationPrompt });
         taskManager.addTaskNote(taskId, `# Implementation Assistance\n\n${result.text}`, 'AI Implementation Assistant', 'solution');
-        // Update status if needed
         if (task.status === TaskStatus.TODO || task.status === TaskStatus.BACKLOG) {
             taskManager.updateTask(taskId, { status: TaskStatus.IN_PROGRESS });
             logger.info(`Task ${taskId} status updated to IN_PROGRESS.`);

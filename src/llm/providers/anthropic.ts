@@ -2,6 +2,8 @@ import { LLMClient, LLMCompletionOptions } from '../types.js';
 import Anthropic from '@anthropic-ai/sdk';
 import process from 'process';
 import { ErrorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../../core/errorHandler.js';
+import { JsonUtils } from '../../core/jsonUtils.js';
+import logger from '../../core/logger.js';
 
 const errorHandler = ErrorHandler.getInstance();
 
@@ -12,17 +14,17 @@ export class AnthropicClient implements LLMClient {
 
   constructor(model?: string) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
-
+    
     if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY environment variable is required for Anthropic client');
     }
 
     this.client = new Anthropic({
-      apiKey: apiKey
+      apiKey
     });
 
-    this.model = model || process.env.MODEL || 'claude-3-opus-20240229';
-
+    this.model = model || process.env.MODEL || 'claude-3.7-sonnet-20240607';
+    
     if (process.env.LLM_MAX_RETRIES) {
       this.maxRetries = parseInt(process.env.LLM_MAX_RETRIES, 10);
     }
@@ -36,15 +38,37 @@ export class AnthropicClient implements LLMClient {
       topP,
       stream,
       onStreamUpdate,
-      systemPrompt
+      systemPrompt,
+      stopSequences
     } = options;
+    
+    const isJsonRequest = systemPrompt?.includes('JSON') ||
+                          systemPrompt?.includes('json') ||
+                          prompt?.includes('JSON') || 
+                          prompt?.includes('json');
+    
+    let effectiveSystemPrompt = systemPrompt;
+    let effectiveTemperature = temperature;
+    
+    if (isJsonRequest) {
+      
+      if (!effectiveSystemPrompt) {
+        effectiveSystemPrompt = "CRITICAL: You are a pure JSON response system. You MUST ONLY output valid JSON with ABSOLUTELY NOTHING before or after it. ANY text outside the JSON will cause system failure.";
+      } else if (!effectiveSystemPrompt.toLowerCase().includes('json-only') && !effectiveSystemPrompt.toLowerCase().includes('pure json')) {
+        effectiveSystemPrompt = "CRITICAL: Output ONLY valid JSON with NOTHING else. ANY text outside the JSON will cause system failure.\n\n" + effectiveSystemPrompt;
+      }
+      
+      
+      if (effectiveTemperature > 0.1) {
+        effectiveTemperature = 0.01; 
+      }
+    }
 
     let retryCount = 0;
     let lastError: any = null;
 
     while (retryCount <= this.maxRetries) {
       try {
-
         if (retryCount > 0) {
           const backoffMs = Math.min(1000 * Math.pow(2, retryCount - 1), 10000);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -54,9 +78,9 @@ export class AnthropicClient implements LLMClient {
           const response = await this.client.messages.create({
             model: this.model,
             max_tokens: maxTokens,
-            temperature: temperature,
+            temperature: effectiveTemperature,
             top_p: topP,
-            system: systemPrompt,
+            system: effectiveSystemPrompt,
             messages: [{ role: 'user', content: prompt }],
             stream: true,
           });
@@ -77,11 +101,12 @@ export class AnthropicClient implements LLMClient {
           const response = await this.client.messages.create({
             model: this.model,
             max_tokens: maxTokens,
-            temperature: temperature,
+            temperature: effectiveTemperature,
             top_p: topP,
-            system: systemPrompt,
+            system: effectiveSystemPrompt,
             messages: [{ role: 'user', content: prompt }],
             stream: false,
+            stop_sequences: stopSequences,
           });
 
           let responseText = '';
@@ -90,7 +115,16 @@ export class AnthropicClient implements LLMClient {
               responseText += content.text;
             }
           }
-
+          
+          
+          if (isJsonRequest && responseText) {
+            
+            const jsonArray = JsonUtils.extractJsonArray(responseText, false);
+            if (jsonArray !== null) {
+              responseText = JSON.stringify(jsonArray);
+            }
+          }
+          
           return responseText;
         }
       } catch (error) {
@@ -98,10 +132,10 @@ export class AnthropicClient implements LLMClient {
 
         const isRetryable = 
           error instanceof Error && 
-          (error.message.includes('network') || 
-           error.message.includes('timeout') ||
-           error.message.includes('rate') ||
-           error.message.includes('limit') ||
+          (error.message.includes('500') || 
+           error.message.includes('502') || 
+           error.message.includes('503') || 
+           error.message.includes('timeout') || 
            error.message.includes('429'));
 
         if (isRetryable && retryCount < this.maxRetries) {
@@ -122,41 +156,25 @@ export class AnthropicClient implements LLMClient {
 
         errorHandler.handleError(
           new TaskError(
-            `Anthropic API error: ${error instanceof Error ? error.message : String(error)}`,
+            `Anthropic API error (after ${this.maxRetries} retries): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
             ErrorCategory.LLM,
             ErrorSeverity.ERROR,
-            { operation: 'anthropic-complete' },
-            error instanceof Error ? error : undefined
+            { operation: 'anthropic-complete', additionalInfo: { maxRetriesExceeded: true } },
+            lastError instanceof Error ? lastError : undefined
           )
         );
 
         throw new TaskError(
-          `Anthropic API error: ${error instanceof Error ? error.message : String(error)}`,
+          `Anthropic API error (after ${this.maxRetries} retries): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
           ErrorCategory.LLM,
           ErrorSeverity.ERROR,
-          { operation: 'anthropic-complete' },
-          error instanceof Error ? error : undefined
+          { operation: 'anthropic-complete', additionalInfo: { maxRetriesExceeded: true } },
+          lastError instanceof Error ? lastError : undefined
         );
       }
     }
 
-    errorHandler.handleError(
-      new TaskError(
-        `Anthropic API error (after ${this.maxRetries} retries): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-        ErrorCategory.LLM,
-        ErrorSeverity.ERROR,
-        { operation: 'anthropic-complete', additionalInfo: { maxRetriesExceeded: true } },
-        lastError instanceof Error ? lastError : undefined
-      )
-    );
-
-    throw new TaskError(
-      `Anthropic API error (after ${this.maxRetries} retries): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-      ErrorCategory.LLM,
-      ErrorSeverity.ERROR,
-      { operation: 'anthropic-complete', additionalInfo: { maxRetriesExceeded: true } },
-      lastError instanceof Error ? lastError : undefined
-    );
+    throw new Error(`Unreachable code: should have returned or thrown by now`);
   }
 
   getProviderName(): string {

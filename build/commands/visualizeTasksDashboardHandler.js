@@ -1,7 +1,7 @@
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
 import { TaskStatus, TaskPriority } from "../core/types.js";
-export const VisualizeTasksDashboardSchema = {}; // No parameters
+export const VisualizeTasksDashboardSchema = {};
 export async function visualizeTasksDashboardHandler(taskManager, params) {
     const notInitialized = checkTaskManagerInitialized(taskManager);
     if (notInitialized)
@@ -20,7 +20,6 @@ export async function visualizeTasksDashboardHandler(taskManager, params) {
                 ]
             };
         }
-        // Calculate stats (same as original)
         const totalTasks = allTasks.length;
         const completedTasks = allTasks.filter(task => task.status === TaskStatus.DONE).length;
         const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -43,7 +42,6 @@ export async function visualizeTasksDashboardHandler(taskManager, params) {
             statusCounts[task.status]++;
             priorityCounts[task.priority]++;
         });
-        // Format response (same as original)
         let dashboard = '# Task Dashboard\n\n';
         dashboard += '## Overall Progress\n\n';
         dashboard += `${completedTasks}/${totalTasks} tasks complete (${completionPercentage}%)\n\n`;

@@ -14,6 +14,8 @@ Conductor Tasks allows you to manage development tasks, parse requirements, gene
 *   Groq
 *   Google (Gemini)
 *   xAI (Grok)
+*   Perplexity AI
+*   Ollama (locally hosted models)
 
 Configure your preferred provider using API keys via environment variables (see configuration details below).
 
@@ -30,10 +32,9 @@ Configure your preferred provider using API keys via environment variables (see 
 *   **Notes:** Add progress updates, comments, blockers, or solutions to tasks.
 *   **Visualization:** View tasks as a Kanban board, dependency tree, or dashboard summary.
 *   **CLI & MCP:** Usable as both a standalone command-line tool and an MCP server for IDE integration.
-*   **Configurable:** Supports multiple LLM providers (see list above) via environment variables.
+*   **Intelligent Workspace Detection:** Automatically detects the current workspace root directory.
+*   **Configurable:** Supports multiple LLM providers via environment variables.
 *   **Flexible Storage:** Stores tasks in a local `TASKS.md` file.
-
-
 
 ## Getting Started / Setup
 
@@ -46,7 +47,7 @@ There are two primary ways to configure and use Conductor Tasks:
     *   [Jump to CLI Usage Guide](#cli-usage)
     *   [Jump to CLI Configuration (.env)](#cli-configuration-env)
 
-## MCP Integration (Recommended for IDEs)
+## MCP Integration (Recommended)
 
 While Conductor Tasks works great as a standalone CLI tool, it truly shines when integrated into an environment supporting the **Model Context Protocol (MCP)**, such as the [Cursor IDE](https://cursor.sh/). This allows the AI assistant in your editor to directly interact with Conductor for seamless task management.
 
@@ -85,7 +86,6 @@ Configuring Conductor via MCP involves setting environment variables directly wi
 
 **For a comprehensive list of all available MCP environment variables and detailed setup instructions, please refer to the [MCP Configuration Guide](./docs/mcp-setup.md).**
 
-Running `conductor-tasks --serve-mcp` manually from your terminal will also start the server, but it's primarily intended for integration tools to launch.
 
 ## CLI Usage
 
@@ -107,12 +107,30 @@ The main command is `conductor-tasks`.
 conductor-tasks [command] [options]
 ```
 
+## CLI Configuration (.env)
+
+If you are primarily using Conductor Tasks via the command line (not through MCP integration), you can configure it using a `.env` file.
+
+1.  **Create a `.env` file** in the directory where you run `conductor-tasks` (or in your project root).
+2.  **Add your API keys and other settings:**
+
+    ```dotenv
+    # Example .env file
+    OPENAI_API_KEY=sk-...
+    ANTHROPIC_API_KEY=sk-ant-api03-...
+    # GROQ_API_KEY=gsk_...
+    # Add other supported provider keys as needed
+
+    # Optional: Set default provider
+    # LLM_PROVIDER=openai
+
+    # Optional: Override default task file path
+    # CONDUCTOR_TASKS_FILE=./project/TASKS.md
+    ```
+
 **Global Options:**
 
-*   `-f, --file <path>`: Path to the `TASKS.md` file (defaults to `./TASKS.md` in the current directory).
-*   `--help, -h`: Show help.
-*   `--version, -v`: Show version number.
-*   `--serve-mcp`: Run in MCP server mode (for IDE integration, not for direct CLI use - see MCP section above).
+*   `--help, -h`: Show help
 
 **Commands:**
 
@@ -209,45 +227,4 @@ Requirement: Users must be able to login with email/password..."`
 *   **`dashboard`**: Display task dashboard with summary statistics.
     *   Example: `conductor-tasks dashboard`
 
-## CLI Configuration (.env)
-
-If you are primarily using Conductor Tasks via the command line (not through MCP integration), you can configure it using a `.env` file.
-
-1.  **Create a `.env` file** in the directory where you run `conductor-tasks` (or in your project root).
-2.  **Add your API keys and other settings:**
-
-    ```dotenv
-    # Example .env file
-    OPENAI_API_KEY=sk-...
-    ANTHROPIC_API_KEY=sk-ant-api03-...
-    # GROQ_API_KEY=gsk_...
-    # Add other supported provider keys as needed
-
-    # Optional: Set default provider
-    # LLM_PROVIDER=openai
-
-    # Optional: Override default task file path
-    # CONDUCTOR_TASKS_FILE=./project/TASKS.md
-    ```
-
-**Supported Environment Variables in `.env`:**
-
-*   `OPENAI_API_KEY`: Your OpenAI API key.
-*   `ANTHROPIC_API_KEY`: Your Anthropic API key.
-*   `GROQ_API_KEY`: Your Groq API key.
-*   `MISTRAL_API_KEY`: Your Mistral API key.
-*   `GEMINI_API_KEY`: Your Google Gemini API key.
-*   `XAI_API_KEY`: Your xAI API key.
-*   `LLM_PROVIDER`: Set the default LLM provider (e.g. `openai`, `anthropic`, `groq`). If unset, a default provider order is used.
-*   `CONDUCTOR_TASKS_FILE`: Override the default path for the `TASKS.md` file (defaults to `./TASKS.md`).
-
-**Note:** Environment variables set via MCP configuration take precedence over `.env` files when running through an integrated editor.
-
-## Development
-
-1.  Clone the repository.
-2.  Install dependencies: `npm install`
-3.  Build the code: `npm run build`
-4.  Run in watch mode: `npm run dev`
-5.  Run CLI during development: `node ./build/index.js [command] [options]`
 

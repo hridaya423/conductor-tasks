@@ -11,8 +11,7 @@ export async function initializeTasksHandler(taskManager, params) {
     try {
         const { projectName, projectDescription, filePath } = params;
         logger.info(`Initializing task system for project: ${projectName} at ${filePath}`);
-        // Check if file exists before calling initialize
-        const normalizedPath = path.resolve(filePath); // Ensure path is absolute for check
+        const normalizedPath = path.resolve(filePath);
         if (fs.existsSync(normalizedPath)) {
             logger.warn(`Task file already exists at ${normalizedPath}. Initialization aborted.`);
             return {

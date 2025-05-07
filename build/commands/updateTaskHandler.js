@@ -93,7 +93,7 @@ export async function updateTaskHandler(taskManager, params) {
                 ]
             };
         }
-        taskManager.saveTasks(); // Ensure tasks are saved after update
+        taskManager.saveTasks();
         logger.info(`Task ${id} updated successfully.`);
         return {
             content: [

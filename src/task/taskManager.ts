@@ -7,12 +7,30 @@ import errorHandler, { ErrorCategory, ErrorSeverity, TaskError } from '../core/e
 import markdownRenderer from '../core/markdownRenderer.js';
 import { ErrorHandler } from '../core/errorHandler.js';
 import logger from '../core/logger.js';
+import { JsonUtils } from '../core/jsonUtils.js';
 
 const DEFAULT_CONFIG = {
   defaultSubtasks: 3,
   defaultPriority: TaskPriority.MEDIUM,
   tasksFileName: 'TASKS.md'
 };
+
+
+function detectWorkspaceDirectory(): string {
+  
+  if (process.env.WORKSPACE_FOLDER_PATHS) {
+    const paths = process.env.WORKSPACE_FOLDER_PATHS.split(';');
+    if (paths.length > 0 && paths[0]) {
+      logger.info(`Using workspace path from WORKSPACE_FOLDER_PATHS: ${paths[0]}`);
+      return paths[0];
+    }
+  }
+  
+  
+  const cwd = process.cwd();
+  logger.info(`No workspace path found, using current directory: ${cwd}`);
+  return cwd;
+}
 
 export class TaskManager {
   private tasks: Map<string, Task> = new Map();
@@ -31,8 +49,16 @@ export class TaskManager {
     this.llmManager = llmManager;
     this.contextManager = contextManager;
 
-    this.workspaceRoot = process.cwd();
-    logger.info(`Using current working directory as workspace root: ${this.workspaceRoot}`);
+    this.workspaceRoot = detectWorkspaceDirectory();
+    logger.info(`Using workspace root: ${this.workspaceRoot}`);
+    
+    
+    try {
+      process.chdir(this.workspaceRoot);
+      logger.info(`Changed process.cwd() to workspace root: ${process.cwd()}`);
+    } catch (err) {
+      logger.warn(`Failed to change process.cwd() to workspace root: ${err}`);
+    }
 
     this.config = {
       defaultSubtasks: this.getEnvInt('DEFAULT_SUBTASKS', DEFAULT_CONFIG.defaultSubtasks),
@@ -78,7 +104,19 @@ export class TaskManager {
   }
 
   async initialize(projectName: string, projectDescription: string, filePath: string): Promise<void> {
+    
+    this.workspaceRoot = detectWorkspaceDirectory();
+    logger.info(`Workspace root for initialization: ${this.workspaceRoot}`);
+    
+    try {
+      process.chdir(this.workspaceRoot);
+      logger.info(`Changed process.cwd() to workspace root: ${process.cwd()}`);
+    } catch (err) {
+      logger.warn(`Failed to change process.cwd() to workspace root: ${err}`);
+    }
+    
     const normalizedPath = this.normalizePath(filePath);
+    logger.info(`Normalized file path for initialization: ${normalizedPath}`);
 
     if (fs.existsSync(normalizedPath)) {
       throw new Error(`Task file already exists at ${normalizedPath}. Cannot initialize a new task system at this location.`);
@@ -392,6 +430,18 @@ IMPORTANT: Use the exact format specified above with no deviations. Each task mu
   }
 
   async createTask(title: string, description: string, userInput?: string, parentId?: string): Promise<string> {
+    
+    if (!this.initialized && this.tasks.size === 0) {
+      this.workspaceRoot = detectWorkspaceDirectory();
+      logger.info(`Re-detected workspace root: ${this.workspaceRoot}`);
+      
+      
+      if (!this.tasksFilePath || this.tasksFilePath === path.join(process.cwd(), this.config.tasksFileName)) {
+        this.tasksFilePath = path.join(this.workspaceRoot, this.config.tasksFileName);
+        logger.info(`Updated tasks file path to: ${this.tasksFilePath}`);
+      }
+    }
+    
     const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const now = Date.now();
 
@@ -907,70 +957,150 @@ Based *only* on the information provided above, generate a comprehensive, step-b
     });
   }
 
+  private extractJsonFromText(text: string): any {
+    return JsonUtils.extractJsonArray(text, false);
+  }
+
   async parsePRD(content: string): Promise<string[]> {
     return ErrorHandler.tryCatch(
       async () => {
+        console.log(`Starting parsePRD in TaskManager with content length: ${content.length}`);
+        
+        
+        if (!this.initialized && this.tasks.size === 0) {
+          
+          const workspaceBeforeRedetection = this.workspaceRoot;
+          this.workspaceRoot = detectWorkspaceDirectory();
+          
+          
+          if (this.workspaceRoot !== workspaceBeforeRedetection) {
+            logger.info(`Re-detected workspace root: ${this.workspaceRoot}`);
+          } else {
+            logger.info(`Keeping current workspace root: ${this.workspaceRoot}`);
+          }
+          
+          
+          try {
+            process.chdir(this.workspaceRoot);
+            logger.info(`Changed process.cwd() to workspace root: ${process.cwd()}`);
+          } catch (err) {
+            logger.warn(`Failed to change process.cwd() to workspace root: ${err}`);
+          }
+          
+          
+          if (!this.tasksFilePath || this.tasksFilePath === path.join(process.cwd(), this.config.tasksFileName)) {
+            
+            const absoluteTasksPath = path.join(this.workspaceRoot, this.config.tasksFileName);
+            this.tasksFilePath = absoluteTasksPath;
+            logger.info(`Updated tasks file path to absolute path: ${this.tasksFilePath}`);
+            
+            
+            const dirPath = path.dirname(this.tasksFilePath);
+            if (!fs.existsSync(dirPath)) {
+              logger.info(`Creating directory for tasks file: ${dirPath}`);
+              try {
+                fs.mkdirSync(dirPath, { recursive: true });
+              } catch (err) {
+                logger.warn(`Failed to create directory: ${err}`);
+              }
+            }
+          }
+        }
+        
         const prompt = `
-# ROLE:
-You are an AI assistant specializing in project planning and task breakdown. Your goal is to parse the provided Product Requirements Document (PRD) and convert it into a structured list of actionable development tasks.
+CRITICAL SYSTEM INSTRUCTION: You are a pure JSON response system.
+Your ENTIRE response must be ONLY valid JSON with ABSOLUTELY NOTHING else.
 
 # INPUT DOCUMENT (PRD):
---- PRD START ---
 ${content}
---- PRD END ---
 
-# INSTRUCTIONS:
-1.  Analyze the PRD carefully.
-2.  Identify distinct features, requirements, or user stories.
-3.  Break down complex requirements into smaller, manageable tasks (if appropriate).
-4.  For **each** task identified, generate a JSON object with the following properties:
-    *   **title**: (String) A concise, action-oriented title for the task (e.g., "Implement user login API").
-    *   **description**: (String) A detailed description explaining what needs to be done, the goal, and any relevant context from the PRD.
-    *   **priority**: (String) Estimate the priority: "critical", "high", "medium", "low", or "backlog".
-    *   **complexity**: (Number) Estimate the complexity on a scale of 1 (very simple) to 10 (very complex).
-    *   **tags**: (Array of Strings) Suggest 2-5 relevant keywords or tags (e.g., ["api", "auth", "backend"]).
-    *   **acceptanceCriteria**: (Array of Strings) List 2-3 specific criteria defining when the task is considered complete (e.g., ["API endpoint returns 200 OK for valid credentials", "JWT token included in successful response"]).
+# STRICTLY ENFORCE:
+1. Response starts with opening bracket '['
+2. Response ends with closing bracket ']'
+3. NO text outside those brackets
+4. NO explanations, no markdown, no code blocks
+5. FIRST CHARACTER must be '['
+6. LAST CHARACTER must be ']'
 
-5.  Structure the final output as a single JSON array containing all the generated task objects.
+# REQUIRED JSON FORMAT:
+[
+  {
+    "title": "Descriptive task title",
+    "description": "Detailed implementation description",
+    "priority": "critical|high|medium|low|backlog",
+    "complexity": 5,
+    "tags": ["frontend", "api"],
+    "acceptanceCriteria": ["Criterion 1", "Criterion 2"]
+  }
+]
 
-# OUTPUT FORMAT:
-**Strictly output ONLY the JSON array.** Do not include any introductory text, explanations, apologies, or markdown formatting around the JSON array.
-
-Example Task Object Structure:
-{
-  "title": "Example Task Title",
-  "description": "Detailed description here...",
-  "priority": "high",
-  "complexity": 5,
-  "tags": ["example", "backend"],
-  "acceptanceCriteria": ["Criterion 1 met", "Criterion 2 verified"]
-}
-
-JSON Array Output:
+CRITICAL WARNING: ANY TEXT OUTSIDE THE JSON WILL CAUSE A FATAL ERROR.
 `;
 
-        const result = await this.llmManager.sendRequest({ prompt });
-        const llmOutput = result.text.trim();
+        console.log(`Sending LLM request for PRD parsing...`);
+          const result = await this.llmManager.sendRequest({ 
+            prompt,
+            systemPrompt: "CRITICAL: You are a JSON-only response system. Output raw JSON array ONLY with no other text or formatting.",
+            options: {
+              temperature: 0.05 
+            }
+          });
+          
+          console.log(`Received LLM response for PRD parsing. Length: ${result.text.length}`);
+          console.log(`\n===== START LLM RESPONSE =====\n${result.text}\n===== END LLM RESPONSE =====\n`);
+          
+          const llmOutput = result.text.trim();
 
-        const jsonMatch = llmOutput.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const tasksList = JSON.parse(jsonMatch[0]);
-
-          const taskIds: string[] = [];
-
-          for (const taskData of tasksList) {
-            const taskId = await this.createTask(
-              taskData.title,
-              taskData.description
-            );
-
-            taskIds.push(taskId);
+          
+          let parsedTasks;
+          try {
+            
+            parsedTasks = JsonUtils.ensureJsonArray(llmOutput);
+            console.log(`Successfully extracted JSON data with ${parsedTasks.length} tasks`);
+            
+            if (parsedTasks.length === 0) {
+              console.log(`WARNING: Extracted an empty JSON array`);
+            }
+          } catch (parseError) {
+            console.log(`Failed to parse LLM response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+            throw new Error(`Failed to parse LLM output into tasks: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
           }
+          
+          console.log(`Processing ${parsedTasks.length} tasks from LLM response`);
+          
+          const taskIds: string[] = [];
+          for (const taskData of parsedTasks) {
+            try {
+              const taskId = await this.createTask(
+                taskData.title,
+              taskData.description
+              );
+              
+              const task = this.getTask(taskId);
+            if (task) {
+              if (taskData.priority) {
+                task.priority = this.stringToPriority(taskData.priority);
+              }
+              
+              if (taskData.complexity && typeof taskData.complexity === 'number') {
+                task.complexity = Math.min(Math.max(1, taskData.complexity), 10);
+              }
+              
+              if (taskData.tags && Array.isArray(taskData.tags)) {
+                task.tags = taskData.tags;
+              }
+              
+              this.tasks.set(taskId, task);
+            }
 
-          return taskIds;
+              taskIds.push(taskId);
+            } catch (taskError) {
+            console.log(`Error creating task "${taskData.title}": ${taskError instanceof Error ? taskError.message : String(taskError)}`);
+          }
         }
 
-        throw new Error('Could not parse LLM output into tasks');
+        console.log(`Created ${taskIds.length} tasks from parsed PRD.`);
+        return taskIds;
       },
       ErrorCategory.PARSING,
       'parse_prd',
@@ -979,78 +1109,65 @@ JSON Array Output:
     );
   }
 
-  private loadTasks(): void {
+  loadTasks(): void {
     try {
-      if (!fs.existsSync(this.tasksFilePath)) {
-        logger.info(`Tasks file not found at ${this.tasksFilePath}, will create a new one when tasks are saved`);
-
-        this.tasks = new Map();
+      if (!this.tasksFilePath || !fs.existsSync(this.tasksFilePath)) {
+        logger.warn(`Tasks file does not exist at ${this.tasksFilePath}`);
         return;
       }
 
-      try {
-        const markdown = fs.readFileSync(this.tasksFilePath, 'utf8');
-        if (!markdown || markdown.trim() === '') {
-          logger.info(`Tasks file is empty at ${this.tasksFilePath}, initializing empty tasks map`);
-          this.tasks = new Map();
-          return;
-        }
-
-        this.parseMdToTasks(markdown);
-        logger.info(`Loaded ${this.tasks.size} tasks from ${this.tasksFilePath}`);
-      } catch (readError) {
-        logger.error(`Error reading tasks file: ${this.tasksFilePath}`, readError);
-
-        this.tasks = new Map();
-
-        this.saveTasks();
-      }
+      logger.info(`Loading tasks from: ${this.tasksFilePath}`);
+      const tasksData = fs.readFileSync(this.tasksFilePath, 'utf8');
+      
+      
+      this.parseMdToTasks(tasksData);
+      
+      logger.info(`Successfully loaded ${this.tasks.size} tasks from ${this.tasksFilePath}`);
     } catch (error) {
-      logger.error(`Unexpected error loading tasks`, error);
-
-      this.tasks = new Map();
+      errorHandler.handleError(
+        new TaskError(
+          `Failed to load tasks: ${error instanceof Error ? error.message : String(error)}`,
+          ErrorCategory.FILESYSTEM,
+          ErrorSeverity.ERROR,
+          { operation: 'loadTasks', targetFile: this.tasksFilePath },
+          error instanceof Error ? error : undefined
+        )
+      );
     }
   }
 
   saveTasks(): void {
-    return ErrorHandler.tryCatch(
-      async () => {
-        logger.info(`Attempting to save tasks to ${this.tasksFilePath}`);
+    if (!this.tasksFilePath) {
+      const defaultPath = path.join(this.workspaceRoot, this.config.tasksFileName);
+      logger.warn(`No tasks file path set, defaulting to ${defaultPath}`);
+      this.tasksFilePath = defaultPath;
+    }
 
-        const dirname = path.dirname(this.tasksFilePath);
-        if (!fs.existsSync(dirname)) {
-          try {
-            fs.mkdirSync(dirname, { recursive: true });
-            logger.info(`Created directory ${dirname} for saving tasks`);
-          } catch (mkdirError) {
-            logger.error(`Failed to create directory ${dirname}`, mkdirError);
-            throw mkdirError;
-          }
-        }
+    try {
+      logger.info(`Saving tasks to: ${this.tasksFilePath}`);
+      const tasksData = markdownRenderer.renderTasksToMarkdown(this.tasks);
 
-        const markdown = markdownRenderer.renderTasksToMarkdown(this.tasks);
+      
+      const dirPath = path.dirname(this.tasksFilePath);
+      if (!fs.existsSync(dirPath)) {
+        logger.info(`Creating directory: ${dirPath}`);
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
 
-        try {
-          fs.writeFileSync(this.tasksFilePath, markdown, 'utf8');
-          logger.info(`Tasks saved successfully to ${this.tasksFilePath}`);
-          return;
-        } catch (directWriteError) {
-          logger.warn(`Direct write failed, attempting fallback method`, directWriteError);
-
-          const tempPath = path.join(path.dirname(this.tasksFilePath), `.TASKS.md.tmp.${Date.now()}`);
-
-          fs.writeFileSync(tempPath, markdown, 'utf8');
-          logger.info(`Wrote to temp file ${tempPath}`);
-
-          fs.renameSync(tempPath, this.tasksFilePath);
-
-          logger.info(`Tasks saved successfully using temp file method to ${this.tasksFilePath}`);
-        }
-      },
-      ErrorCategory.FILESYSTEM,
-      'save_tasks',
-      { targetFile: this.tasksFilePath }
-    ) as unknown as void;
+      
+      fs.writeFileSync(this.tasksFilePath, tasksData);
+      logger.info(`Successfully saved tasks to ${this.tasksFilePath}`);
+    } catch (error) {
+      errorHandler.handleError(
+        new TaskError(
+          `Failed to save tasks: ${error instanceof Error ? error.message : String(error)}`,
+          ErrorCategory.FILESYSTEM,
+          ErrorSeverity.ERROR,
+          { operation: 'saveTasks', targetFile: this.tasksFilePath },
+          error instanceof Error ? error : undefined
+        )
+      );
+    }
   }
 
   private tasksToMarkdown(): string {
@@ -1425,39 +1542,54 @@ JSON Array Output:
     return this.initialized || this.tasks.size > 0;
   }
 
-  setTasksFilePath(filePath: string, projectName?: string): void {
-    const resolvedPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
-
-    this.tasksFilePath = this.normalizePath(resolvedPath);
-
-    logger.info(`Tasks file path updated to: ${this.tasksFilePath}`);
-
-    const targetDir = path.dirname(this.tasksFilePath);
-    if (!fs.existsSync(targetDir)) {
-      try {
-        fs.mkdirSync(targetDir, { recursive: true });
-        logger.info(`Created directory for tasks file: ${targetDir}`);
-      } catch (error) {
-        logger.error(`Failed to create directory for tasks file`, error);
-      }
-    }
+  setTasksFilePath(filePath: string): void {
+    const normalizedPath = this.normalizePath(filePath);
+    logger.info(`Setting tasks file path to normalized path: ${normalizedPath}`);
+    this.tasksFilePath = normalizedPath;
   }
 
   private normalizePath(filepath: string): string {
-    const absolutePath = path.isAbsolute(filepath) 
-      ? filepath 
-      : path.join(process.cwd(), filepath);
-
-    if (/^[A-Za-z]:[\\/]/.test(absolutePath)) {
-      return path.resolve(absolutePath);
+    logger.debug(`normalizePath input: ${filepath}`);
+    
+    let absolutePath = filepath;
+    if (!path.isAbsolute(filepath)) {
+      absolutePath = path.resolve(this.workspaceRoot, filepath);
+      logger.debug(`Converted relative path to absolute: ${absolutePath}`);
+    } else {
+      logger.debug(`Path already absolute: ${absolutePath}`);
     }
-
-    return path.resolve(absolutePath);
+    
+    if (process.platform === 'win32') {
+      if (absolutePath.startsWith('/') && absolutePath.includes('%3A/')) {
+        const driveMatch = absolutePath.match(/\/([A-Za-z])%3A\//);
+        if (driveMatch && driveMatch[1]) {
+          const driveLetter = driveMatch[1];
+          absolutePath = absolutePath.replace(`/${driveLetter}%3A/`, `${driveLetter}:/`);
+          logger.debug(`Fixed Cursor-style encoded drive letter: ${absolutePath}`);
+        }
+      }
+      
+      absolutePath = path.win32.normalize(absolutePath);
+    }
+    
+    const dirPath = path.dirname(absolutePath);
+    if (path.extname(absolutePath) !== '' && !fs.existsSync(dirPath)) {
+      logger.debug(`Creating directory for path: ${dirPath}`);
+      try {
+        fs.mkdirSync(dirPath, { recursive: true });
+      } catch (err) {
+        logger.warn(`Failed to create directory: ${err}`);
+      }
+    }
+    
+    const finalPath = path.resolve(absolutePath);
+    logger.debug(`normalizePath: final path: ${finalPath}`);
+    return finalPath;
   }
 
   async generateImplementationSteps(taskId: string): Promise<string> {
     const task = this.tasks.get(taskId);
-    if (!task) {
+              if (!task) {
       throw new Error(`Task with ID ${taskId} not found`);
     }
 
@@ -1717,22 +1849,64 @@ Based *only* on the information provided, analyze the task and provide specific,
     }
   }
 
-  async mcpInitializeTasks(projectName: string, projectDescription: string, filePath: string): Promise<string> {
+  async mcpInitializeTasks(
+    projectName: string, 
+    projectDescription: string,
+    filePath: string
+  ): Promise<string> {
     try {
       if (!filePath) {
         throw new Error("filePath is required for task initialization");
       }
-
-      const normalizedPath = this.normalizePath(filePath);
-      if (fs.existsSync(normalizedPath)) {
-        throw new Error(`Task file already exists at ${normalizedPath}. Cannot initialize a new task system at this location.`);
+      
+      logger.info(`Initializing tasks with project: ${projectName}, filePath: ${filePath}`);
+      
+      if (process.env.WORKSPACE_FOLDER_PATHS) {
+        const paths = process.env.WORKSPACE_FOLDER_PATHS.split(';');
+        if (paths.length > 0 && paths[0]) {
+          this.workspaceRoot = paths[0];
+          logger.info(`Using workspace path from WORKSPACE_FOLDER_PATHS: ${this.workspaceRoot}`);
+        }
+      } 
+      else if (path.isAbsolute(filePath)) {
+        const fileDir = path.dirname(filePath);
+        this.workspaceRoot = fileDir;
+        logger.info(`Using file directory as workspace root: ${this.workspaceRoot}`);
+      } 
+      else {
+        this.workspaceRoot = process.cwd();
+        logger.info(`Using current directory as workspace root: ${this.workspaceRoot}`);
+      }
+      
+      try {
+        process.chdir(this.workspaceRoot);
+        logger.info(`Changed process.cwd() to workspace root: ${process.cwd()}`);
+      } catch (err) {
+        logger.warn(`Failed to change process.cwd() to workspace root: ${err}`);
       }
 
-      await this.initialize(projectName, projectDescription, filePath);
+      const tasksFilePath = path.join(this.workspaceRoot, 'TASKS.md');
+      this.setTasksFilePath(tasksFilePath);
+      logger.info(`Setting tasks file path to: ${this.tasksFilePath}`);
+      
+      await this.initialize(projectName, projectDescription, tasksFilePath);
+      
+      this.saveTasks();
+      
+      const result = `
+# Tasks initialized for ${projectName}
 
-      return `Task system initialized successfully!\n\n- Project: ${projectName}\n- TASKS.md location: ${filePath}\n\nYour task management system is ready to use. You can now create tasks, update them, and track your progress.`;
-    } catch (error) {
-      const errorMessage = `Error initializing task system: ${error instanceof Error ? error.message : String(error)}`;
+Tasks file has been created at:
+${this.tasksFilePath}
+
+Project: ${projectName}
+Description: ${projectDescription}
+Workspace root: ${this.workspaceRoot}
+`;
+      
+      return result;
+    } catch (error: any) {
+      const errorMessage = `Error initializing tasks with MCP: ${error.message || String(error)}`;
       logger.error(errorMessage, error);
       throw new Error(errorMessage);
     }
@@ -1758,5 +1932,20 @@ Based *only* on the information provided, analyze the task and provide specific,
       logger.error(errorMessage, error);
       throw new Error(errorMessage);
     }
+  }
+
+  getTaskDependencyTree(taskId: string): { task: Task, dependencies: Task[] } | undefined {
+    const task = this.getTask(taskId);
+    if (!task) return undefined;
+
+    const dependencies: Task[] = [];
+    for (const depId of task.dependencies) {
+      const depTask = this.getTask(depId);
+      if (depTask) {
+        dependencies.push(depTask);
+      }
+    }
+
+    return { task, dependencies };
   }
 }

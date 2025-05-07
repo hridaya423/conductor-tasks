@@ -20,4 +20,5 @@ export declare class LLMManager {
     private processQueue;
     private executeRequest;
     sendRequest(request: LLMRequest, providerName?: string): Promise<LLMResponse>;
+    refinePrompt(originalPrompt: string, failedResponse: string, desiredSpecification: string): Promise<string>;
 }

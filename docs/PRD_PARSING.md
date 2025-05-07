@@ -1,6 +1,6 @@
 # PRD Parsing Guide
 
-This guide explains how to use the PRD (Product Requirements Document) parsing functionality in the Conductor system.
+This guide explains how to use the PRD (Product Requirements Document) parsing functionality in the Conductor Tasks system.
 
 ## What is PRD Parsing?
 
@@ -8,21 +8,25 @@ PRD parsing is a feature that allows you to automatically extract tasks from a P
 
 ## Command Usage
 
-You can parse a PRD using the following command:
+You can parse a PRD using the following commands:
 
 ```sh
-conductor parse <path-to-prd-file> [options]
+# Parse a PRD file
+conductor-tasks parse-prd-file <path-to-prd-file> [options]
+
+# Or parse PRD content directly
+conductor-tasks parse-prd --prdContent "Your PRD content here" [options]
 ```
 
 ### Options
 
-- `--tasks-file`: Generate/update a TASKS.md file with the extracted tasks (default: true)
+- `--createTasksFile`: Generate/update a TASKS.md file with the extracted tasks (default: true)
 - `--verbose`: Show detailed output of the extracted tasks (default: false)
 
 ## Example
 
 ```sh
-conductor parse ./docs/product_requirements.md --tasks-file
+conductor-tasks parse-prd-file ./docs/product_requirements.md --createTasksFile
 ```
 
 This command will:
@@ -86,7 +90,16 @@ If you want to customize how tasks are extracted, you can modify the prompt temp
 
 Once you've parsed your PRD and generated tasks, you can:
 
-1. List all tasks: `conductor list`
-2. Visualize tasks: `conductor visualize kanban`
-3. Get the next task to work on: `conductor next`
-4. Edit task details: `conductor update <task-id> ...` 
+1. List all tasks: `conductor-tasks list`
+2. Visualize tasks: `conductor-tasks kanban`
+3. Get the next task to work on: `conductor-tasks next`
+4. Edit task details: `conductor-tasks update <task-id> ...`
+
+## Retry Mechanism
+
+The PRD parser includes a built-in retry mechanism that helps handle parsing failures:
+
+- If the parsing fails due to formatting issues, the system will automatically retry
+- Each retry uses a more explicit prompt with clearer instructions
+- The system uses exponential backoff between retries to avoid rate limiting
+- You can see verbose logging of retry attempts with the `--verbose` flag 

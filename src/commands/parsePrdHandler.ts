@@ -18,16 +18,25 @@ export async function parsePrdHandler(
     const { prdContent, createTasksFile } = params;
     logger.info(`Parsing PRD content (length: ${prdContent.length}), createTasksFile: ${createTasksFile}`);
 
+    
+    console.log(`\n===== PRD CONTENT SAMPLE =====\n${prdContent.substring(0, 200)}...\n===== END PRD SAMPLE =====\n`);
+
     const notInitialized = checkTaskManagerInitialized(taskManager);
     if (notInitialized && createTasksFile) {
-      const defaultPath = path.join(process.cwd(), 'TASKS.md');
+      
+      const workspaceRoot = (taskManager as any).workspaceRoot || process.cwd();
+      const defaultPath = path.resolve(path.join(workspaceRoot, 'TASKS.md'));
+      
+      logger.info(`Initializing task system at absolute path: ${defaultPath}`);
       await taskManager.initialize("PRD Project", "Project initialized from PRD parsing", defaultPath);
       logger.info("Task system automatically initialized for PRD parsing");
     } else if (notInitialized) {
       return notInitialized;
     }
 
+    logger.info(`Sending PRD content to LLM for parsing...`);
     const taskIds = await taskManager.parsePRD(prdContent);
+    logger.info(`PRD parsing complete, received ${taskIds.length} tasks`);
 
     if (taskIds.length === 0) {
       logger.warn('No tasks extracted from PRD content');

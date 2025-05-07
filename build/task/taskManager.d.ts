@@ -41,8 +41,9 @@ export declare class TaskManager {
     getNextTask(): Task | undefined;
     getTasksNeedingAttention(): Task[];
     private sortTasksByPriority;
+    private extractJsonFromText;
     parsePRD(content: string): Promise<string[]>;
-    private loadTasks;
+    loadTasks(): void;
     saveTasks(): void;
     private tasksToMarkdown;
     exportTasksToMarkdown(): string;
@@ -54,11 +55,15 @@ export declare class TaskManager {
     reloadTasks(): boolean;
     analyzeCodebase(): Promise<string>;
     isInitialized(): boolean;
-    setTasksFilePath(filePath: string, projectName?: string): void;
+    setTasksFilePath(filePath: string): void;
     private normalizePath;
     generateImplementationSteps(taskId: string): Promise<string>;
     expandTask(taskId: string, expansionPrompt?: string): Promise<string>;
     suggestTaskImprovements(taskId: string): Promise<string>;
     mcpInitializeTasks(projectName: string, projectDescription: string, filePath: string): Promise<string>;
     mcpCreateTask(title: string, description: string, additionalContext?: string): Promise<string>;
+    getTaskDependencyTree(taskId: string): {
+        task: Task;
+        dependencies: Task[];
+    } | undefined;
 }

@@ -161,7 +161,6 @@ export class ContextManager {
         processedContent = `[Audio data with ${(content as Buffer).length} bytes]`;
         break;
       case "structured":
-
         processedContent = JSON.stringify(content);
         break;
     }

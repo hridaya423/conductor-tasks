@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import { TaskManager, TaskPriority, TaskStatus } from '../taskManager.js';
+import { TaskManager } from '../task/taskManager.js';
+import { TaskPriority, TaskStatus } from '../core/types.js';
 import { TaskVisualizer } from '../task/visualizer.js';
 import chalk from 'chalk';
 
