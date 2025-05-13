@@ -1,4 +1,4 @@
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult } from '../types.js';
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
 export declare class MistralProvider implements LLMProvider {
     private client;
@@ -13,8 +13,7 @@ export declare class MistralClient implements LLMClient {
     private model;
     private providerName;
     constructor(model?: string);
-    complete(options: LLMCompletionOptions): Promise<string>;
-    private extractStreamContent;
+    complete(options: LLMCompletionOptions): Promise<LLMCompletionResult>;
     getProviderName(): string;
     getModelName(): string;
 }

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
-import { checkTaskManagerInitialized } from "../core/checkInit.js";
+import { checkTaskManagerInitialized } from "../core/checkInit.js"; 
 import logger from "../core/logger.js";
+import { ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const AddTaskNoteSchema = {
   taskId: z.string().describe("ID of the task"),
@@ -13,9 +14,10 @@ export const AddTaskNoteSchema = {
 export async function addTaskNoteHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof AddTaskNoteSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
-  const notInitialized = checkTaskManagerInitialized(taskManager);
-  if (notInitialized) return notInitialized;
+): Promise<ToolResultWithNextSteps> {
+  
+  const notInitializedResult = checkTaskManagerInitialized(taskManager);
+  if (notInitializedResult) return notInitializedResult;
 
   try {
     const { taskId, content, author, type } = params;
@@ -26,32 +28,44 @@ export async function addTaskNoteHandler(
     if (!note) {
       logger.warn(`Task not found for adding note: ${taskId}`);
       return {
-        content: [
+        content: [ 
           {
             type: "text",
             text: `Error: Task with ID ${taskId} not found.`
           }
-        ]
+        ],
+        isError: true
       };
     }
 
+    const suggested_actions: SuggestedAction[] = [
+      {
+        tool_name: "get-task",
+        parameters: { id: taskId },
+        reason: "View the task to see the newly added note.",
+        user_facing_suggestion: `View task ${taskId} to see the new note?`
+      }
+    ];
+
     return {
-      content: [
+      content: [ 
         {
           type: "text",
           text: `Note added to task ${taskId}:\n\n${content}`
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error adding note to task:', { error, taskId: params.taskId });
     return {
-      content: [
+      content: [ 
         {
           type: "text",
           text: `Error adding note to task ${params.taskId}: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

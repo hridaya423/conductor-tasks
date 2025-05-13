@@ -27,10 +27,11 @@ Add the following configuration to your editor's MCP settings:
         "XAI_API_KEY": "YOUR_XAI_API_KEY_HERE",
         "PERPLEXITY_API_KEY": "YOUR_PERPLEXITY_API_KEY_HERE",
         "OLLAMA_ENABLED": "true",
+        "OPENROUTER_API_KEY": "YOUR_OPENROUTER_API_KEY_HERE",
         
         "DEFAULT_LLM_PROVIDER": "anthropic",
         
-        "MODEL": "claude-3-opus-20240229",
+        "MODEL": "claude-3.7-sonnet-20240607",
         "TEMPERATURE": "0.7",
         "MAX_TOKENS": "4000",
         "TOP_P": "0.9",
@@ -53,14 +54,15 @@ You need to provide at least one API key to use Conductor Tasks. The system supp
 
 | Environment Variable | Description | Default Model |
 |----------------------|-------------|--------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models | `claude-3-opus-20240229` |
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models | `claude-3.7-sonnet-20240607` |
 | `OPENAI_API_KEY` | OpenAI API key for GPT models | `gpt-4o` |
 | `MISTRAL_API_KEY` | Mistral AI API key for Mistral models | `mistral-large-latest` |
-| `GROQ_API_KEY` | Groq API key for serving various models | `llama3-8b-8192` |
-| `GEMINI_API_KEY` | Google API key for Gemini models | `gemini-1.5-pro` |
-| `XAI_API_KEY` | xAI API key for Grok models | `grok-1` |
+| `GROQ_API_KEY` | Groq API key for serving various models | `deepseek-r1-distill-llama-70b` |
+| `GEMINI_API_KEY` | Google API key for Gemini models | `gemini-2.5-pro-exp-03-25` |
+| `XAI_API_KEY` | xAI API key for Grok models | `grok-3` |
 | `PERPLEXITY_API_KEY` | Perplexity API key | `llama-3-sonar-medium-32k-online` |
 | `OLLAMA_ENABLED` | Set to "true" to enable Ollama local models | `llama3` |
+| `OPENROUTER_API_KEY` | OpenRouter API key for various models | `mistralai/mistral-7b-instruct` |
 
 ### Provider-Specific Configuration
 
@@ -69,7 +71,7 @@ Each provider has additional configuration options:
 #### Anthropic (Claude)
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-3-opus-20240229 # or claude-3-sonnet-20240229, claude-3-haiku-20240307
+ANTHROPIC_MODEL=claude-3.7-sonnet-20240607 # or claude-3-opus-20240229, claude-3-haiku-20240307
 ANTHROPIC_API_BASE_URL=https://api.anthropic.com # only needed if using a custom API base URL
 ```
 
@@ -119,6 +121,15 @@ OLLAMA_MODEL=llama3 # or any model you have installed in Ollama
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
+#### OpenRouter
+```
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=anthropic/claude-3-opus # Example: Specify any model available on OpenRouter
+# OPENROUTER_API_BASE_URL=https://openrouter.ai/api/v1 # Usually not needed to change
+# OPENROUTER_SITE_URL= # For self-hosted instances, if applicable
+# OPENROUTER_APP_NAME= # Your app name for headers
+```
+
 ### Model Selection
 
 You can specify which model to use globally or for each provider:
@@ -134,6 +145,7 @@ You can specify which model to use globally or for each provider:
 | `XAI_MODEL` | Model to use with xAI | `grok-1` |
 | `PERPLEXITY_MODEL` | Model to use with Perplexity | `llama-3-sonar-medium-32k-online` |
 | `OLLAMA_MODEL` | Model to use with Ollama | `llama3` |
+| `OPENROUTER_MODEL` | Model to use with OpenRouter. Specify model by its full OpenRouter path. | User Defined (e.g., `anthropic/claude-3-opus`) |
 
 ### Generation Parameters
 
@@ -170,15 +182,36 @@ When multiple API keys are provided and no specific provider is selected, the sy
 6. xAI (Grok)
 7. Perplexity
 8. Ollama (Local)
+9. OpenRouter
 
 You can override this by setting `DEFAULT_LLM_PROVIDER` to your preferred provider name:
 ```
 DEFAULT_LLM_PROVIDER=openai
 ```
 
-Valid provider names: `anthropic`, `openai`, `groq`, `gemini`, `mistral`, `xai`, `perplexity`, or `ollama`.
+Valid provider names: `anthropic`, `openai`, `groq`, `gemini`, `mistral`, `xai`, `perplexity`, `ollama`, or `openrouter`.
 
 ## Advanced Features
+
+### Task-Specific Provider Mapping
+
+A powerful feature of Conductor Tasks is the ability to assign specific LLM providers to particular tasks, optimizing performance, cost, and quality:
+
+```
+# Assign task types to specific providers
+ANTHROPIC_TASKS="initialize-project, parse-prd"
+PERPLEXITY_TASKS="research-topic"
+OPENAI_TASKS="generate-implementation-steps, help-implement-task"
+MISTRAL_TASKS="suggest-task-improvements"
+```
+
+This allows you to:
+- Use more powerful models (e.g., Claude Sonnet) for complex initialization and parsing tasks
+- Use specialized research models (e.g., Perplexity) for research tasks
+- Use faster/affordable models for simpler tasks
+- Mix and match to get the best performance for each specific operation
+
+Any tasks not explicitly mapped will use the `DEFAULT_LLM_PROVIDER` or follow the provider preference order.
 
 ### Retry Mechanisms
 

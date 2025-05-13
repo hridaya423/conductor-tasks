@@ -1,0 +1,81 @@
+# Roo Code: General AI Rules & Workflow for Conductor Tasks (All Modes)
+
+This document provides the comprehensive, foundational workflow for you, the AI assistant, when using Conductor Tasks within any Roo Code mode. Mode-specific rules in other directories build upon this core guidance.
+
+## Fundamental Principles:
+
+*   **MCP Tool Exclusivity**: Your **only** way to interact with Conductor Tasks and the project environment (files, commands) is through its MCP tools (e.g., \`get-task\`, \`update-task\`, \`add-task-note\`, \`read_file\`, \`apply_diff\`, \`execute_command\`, \`search_files\`, \`ask_followup_question\`). Do not attempt to infer, bypass this, or parse CLI output.
+*   **Context is King**:
+    *   Before any code modification (\`apply_diff\`, \`write_to_file\`), thoroughly understand the existing code and context using \`read_file\`, \`search_files\`, and potentially \`list_code_definition_names\`.
+    *   For \`apply_diff\`, the \`SEARCH\` block must be an *exact* match of the current file content, including all whitespace and indentation. Verify with \`read_file\` immediately before constructing the diff.
+*   **Clarity in Communication (\`ask_followup_question\`)**:
+    *   If requirements are vague, file paths are uncertain, task details are insufficient, or you need any clarification, use \`ask_followup_question\` **immediately**.
+    *   Provide specific questions and, if possible, suggest 2-4 actionable answers for the user. Do not make assumptions.
+*   **Incremental & Verifiable Changes**:
+    *   Prefer smaller, targeted changes using \`apply_diff\` for existing files.
+    *   After changes, if applicable and relevant to the task, suggest or run tests/linters using \`execute_command\`. Analyze output.
+*   **Error Analysis & Recovery**:
+    *   If \`execute_command\` fails or returns an error, meticulously analyze the output.
+    *   Use \`read_file\` to examine any files mentioned in error messages.
+    *   Attempt to diagnose and fix. If stuck, document the error thoroughly using \`add-task-note\` and use \`ask_followup_question\` for help.
+*   **CRITICAL - Comprehensive Notes (\`add-task-note\`)**: For every significant action, finding, decision, or assumption, document it with \`add-task-note --id <task_id> --note "..."\`. This includes:
+    *   Tools used and key parameters/outcomes.
+    *   Files affected and summaries of changes.
+    *   Commands run and their relevant results.
+    *   Rationale behind your approach.
+    *   This is non-negotiable for maintaining clarity and traceability.
+
+## Standard AI Development Workflow with Conductor Tasks:
+
+1.  **Project Initialization (If Needed)**:
+    *   If \`TASKS.md\` is absent, use \`initialize-project\`.
+    *   For PRDs, consider \`parse-prd --input='<path_to_prd>'\` (if available as MCP tool, or guide user).
+
+2.  **Situational Awareness & Task Selection**:
+    *   **Overview**: \`list-tasks\` for all tasks, statuses, IDs.
+    *   **Next Task**: \`get-next-task\` to identify the immediate focus based on dependencies, priority.
+    *   **Detailed Analysis**: \`get-task --id <task_id>\` for full details of the selected task. Consult \`TASKS.md\` (\`read_file TASKS.md\`) for broader project context.
+
+3.  **Task Breakdown (Expansion)**:
+    *   For complex tasks, use \`expand-task --id <task_id> --prompt "<optional_context>"\` to create sub-tasks.
+    *   Review sub-tasks. Use \`update-task\` or \`add-task-note\` for refinements.
+
+4.  **Iterative Subtask/Task Implementation**:
+    Follow this detailed process for any granular piece of work:
+    a.  **Understand Goal**: Use \`get-task --id <current_task_id>\` for full requirements and existing notes.
+    b.  **Explore & Plan**:
+        *   Use \`read_file\`, \`search_files\`, \`list_files\`, \`list_code_definition_names\` to thoroughly investigate relevant parts of the codebase and project.
+        *   Identify target files, functions, specific lines. Determine intended changes (diffs), new file contents, or commands to run.
+    c.  **Log Initial Plan**: Use \`add-task-note --id <current_task_id> --note "Initial Plan for <task_title/objective>: [Comprehensive details: files to read/modify/create, specific diffs, commands, reasoning, potential challenges...]" \`.
+    d.  **Execute & Implement**:
+        *   Set status: \`update-task --id <current_task_id> --status "in progress"\`.
+        *   Perform actions using MCP tools (\`apply_diff\`, \`write_to_file\`, \`execute_command\`).
+    e.  **Refine & Log Progress Continuously**:
+        *   **After each significant action or finding**, review existing notes (via \`get-task\`) to avoid redundancy.
+        *   **Regularly** use \`add-task-note --id <current_task_id> --note "Progress Update: [Action taken (e.g., applied diff to X.js), outcome, new findings, what worked/didn't, code snippets, decisions, deviations from plan...]" \`.
+        *   This creates a rich, timestamped log.
+    f.  **Verify & Complete**:
+        *   After implementation and verification (e.g., running tests via \`execute_command\` and analyzing results), mark complete: \`update-task --id <current_task_id> --status "completed"\`.
+        *   Add a final summary note: \`add-task-note --id <current_task_id> --note "Implementation complete and verified for <task_title/objective>. Summary: [Brief summary of solution and verification]."\`.
+
+5.  **Handling Dependencies**:
+    *   Ensure prerequisite tasks are 'completed'.
+    *   If new dependencies arise, note them or suggest updates.
+    *   Use \`validate-dependencies\` (if available) for checks.
+
+## Understanding Task Structure (via MCP Tools):
+
+Expect task data from tools like \`get-task\` to include:
+*   **id**: Unique identifier.
+*   **title**: Brief title.
+*   **description**: Task summary.
+*   **status**: Current state.
+*   **dependencies**: Array of prerequisite task IDs.
+*   **priority**: Importance level.
+*   **details** / **notes**: In-depth instructions, context, and your logged notes.
+*   **subtasks**: Array of sub-task objects.
+
+## Configuration Awareness:
+*   Be aware of potential Conductor Tasks or project-specific configurations (e.g., in \`.conductor/config.json\`, or environment variables for MCP server). You don't manage these but note if tool failures suggest config issues.
+
+This general workflow is the foundation. Mode-specific rules in \`.roo/rules-architect/\`, \`.roo/rules-ask/\`, etc., provide specialized instructions for those contexts, always adhering to these core principles.

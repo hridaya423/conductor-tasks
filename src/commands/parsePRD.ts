@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 import { TaskManager } from '../task/taskManager.js';
-import { getLLMClient } from '../llm/clientFactory.js';
+
 import chalk from 'chalk';
 
 export function createParsePRDCommand(taskManager: TaskManager): Command {
@@ -23,13 +23,12 @@ export function createParsePRDCommand(taskManager: TaskManager): Command {
         console.log(chalk.blue(`Parsing PRD file: ${resolvedPath}`));
         
         try {
-          const llmClient = getLLMClient();
-          console.log(chalk.gray(`Using LLM provider: ${llmClient.getProviderName()}`));
+          
+          
           
           console.log(chalk.yellow('Extracting tasks from PRD... (this may take a minute)'));
+          
           const prdContent = fs.readFileSync(resolvedPath, 'utf8');
-          
-          
           const taskIds = await taskManager.parsePRD(prdContent);
           
           console.log(chalk.green(`Successfully extracted ${taskIds.length} tasks from PRD`));

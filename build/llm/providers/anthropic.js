@@ -13,7 +13,7 @@ export class AnthropicClient {
         this.client = new Anthropic({
             apiKey
         });
-        this.model = model || process.env.MODEL || 'claude-3.7-sonnet-20240607';
+        this.model = process.env.ANTHROPIC_MODEL || model || 'claude-3.7-sonnet-20240607';
         if (process.env.LLM_MAX_RETRIES) {
             this.maxRetries = parseInt(process.env.LLM_MAX_RETRIES, 10);
         }
@@ -56,16 +56,52 @@ export class AnthropicClient {
                         stream: true,
                     });
                     let fullResponse = '';
+                    let usage = null;
+                    let finalStopReason = undefined;
+                    let finalModel = this.model;
                     for await (const chunk of response) {
-                        if (chunk.type === 'content_block_delta' && chunk.delta) {
-                            const textValue = typeof chunk.delta === 'object' && 'text' in chunk.delta ? chunk.delta.text : '';
+                        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+                            const textValue = chunk.delta.text;
                             if (textValue) {
                                 fullResponse += textValue;
                                 onStreamUpdate(textValue);
                             }
                         }
+                        else if (chunk.type === 'message_delta' && chunk.delta.stop_reason) {
+                            finalStopReason = chunk.delta.stop_reason;
+                            if (chunk.usage && typeof chunk.usage.output_tokens === 'number') {
+                                usage = {
+                                    promptTokens: 0,
+                                    completionTokens: chunk.usage.output_tokens,
+                                    totalTokens: chunk.usage.output_tokens,
+                                };
+                            }
+                        }
+                        else if (chunk.type === 'message_start') {
+                            if (chunk.message && chunk.message.usage && typeof chunk.message.usage.input_tokens === 'number') {
+                                const inputTokens = chunk.message.usage.input_tokens;
+                                if (usage) {
+                                    usage.promptTokens = inputTokens;
+                                    usage.totalTokens = inputTokens + usage.completionTokens;
+                                }
+                                else {
+                                    usage = {
+                                        promptTokens: inputTokens,
+                                        completionTokens: 0,
+                                        totalTokens: inputTokens,
+                                    };
+                                }
+                            }
+                        }
+                        else if (chunk.type === 'message_stop') {
+                        }
                     }
-                    return fullResponse;
+                    return {
+                        text: fullResponse,
+                        usage: usage,
+                        model: finalModel,
+                        finishReason: finalStopReason,
+                    };
                 }
                 else {
                     const response = await this.client.messages.create({
@@ -79,10 +115,8 @@ export class AnthropicClient {
                         stop_sequences: stopSequences,
                     });
                     let responseText = '';
-                    for (const content of response.content) {
-                        if (content.type === 'text') {
-                            responseText += content.text;
-                        }
+                    if (response.content.length > 0 && response.content[0].type === 'text') {
+                        responseText = response.content[0].text;
                     }
                     if (isJsonRequest && responseText) {
                         const jsonArray = JsonUtils.extractJsonArray(responseText, false);
@@ -90,7 +124,19 @@ export class AnthropicClient {
                             responseText = JSON.stringify(jsonArray);
                         }
                     }
-                    return responseText;
+                    const usage = response.usage
+                        ? {
+                            promptTokens: response.usage.input_tokens,
+                            completionTokens: response.usage.output_tokens,
+                            totalTokens: response.usage.input_tokens + response.usage.output_tokens,
+                        }
+                        : null;
+                    return {
+                        text: responseText,
+                        usage: usage,
+                        model: response.model,
+                        finishReason: response.stop_reason || undefined,
+                    };
                 }
             }
             catch (error) {

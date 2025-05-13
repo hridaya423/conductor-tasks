@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
+import { ToolResultWithNextSteps } from "../core/types.js";
 export declare const CreateTaskSchema: {
     title: z.ZodString;
     description: z.ZodString;
@@ -19,10 +20,5 @@ declare const createTaskSchemaObject: z.ZodObject<{
     additionalContext?: string | undefined;
 }>;
 export type CreateTaskParams = z.infer<typeof createTaskSchemaObject>;
-export declare function createTaskHandler(taskManager: TaskManager, params: CreateTaskParams): Promise<{
-    content: {
-        type: "text";
-        text: string;
-    }[];
-}>;
+export declare function createTaskHandler(taskManager: TaskManager, params: CreateTaskParams): Promise<ToolResultWithNextSteps>;
 export {};

@@ -12,16 +12,17 @@ export async function parsePrdHandler(taskManager, params) {
         const { prdContent, createTasksFile } = params;
         logger.info(`Parsing PRD content (length: ${prdContent.length}), createTasksFile: ${createTasksFile}`);
         console.log(`\n===== PRD CONTENT SAMPLE =====\n${prdContent.substring(0, 200)}...\n===== END PRD SAMPLE =====\n`);
-        const notInitialized = checkTaskManagerInitialized(taskManager);
-        if (notInitialized && createTasksFile) {
+        let notInitializedResult = checkTaskManagerInitialized(taskManager);
+        if (notInitializedResult && createTasksFile) {
             const workspaceRoot = taskManager.workspaceRoot || process.cwd();
             const defaultPath = path.resolve(path.join(workspaceRoot, 'TASKS.md'));
             logger.info(`Initializing task system at absolute path: ${defaultPath}`);
             await taskManager.initialize("PRD Project", "Project initialized from PRD parsing", defaultPath);
             logger.info("Task system automatically initialized for PRD parsing");
+            notInitializedResult = null;
         }
-        else if (notInitialized) {
-            return notInitialized;
+        else if (notInitializedResult) {
+            return notInitializedResult;
         }
         logger.info(`Sending PRD content to LLM for parsing...`);
         const taskIds = await taskManager.parsePRD(prdContent);
@@ -34,7 +35,8 @@ export async function parsePrdHandler(taskManager, params) {
                         type: "text",
                         text: "No tasks could be extracted from the PRD. The document might be too short or not contain any clear requirements."
                     }
-                ]
+                ],
+                isError: true
             };
         }
         logger.info(`Extracted ${taskIds.length} tasks from PRD content`);
@@ -64,13 +66,29 @@ export async function parsePrdHandler(taskManager, params) {
             taskListText += `\n\n_Tasks have been saved to: ${tasksFilePath}_`;
             logger.info(`Tasks saved to ${tasksFilePath}`);
         }
+        const suggested_actions = [
+            {
+                tool_name: "list-tasks",
+                reason: "View all newly created tasks from the PRD content.",
+                user_facing_suggestion: "List all tasks created from the PRD content?"
+            }
+        ];
+        if (taskIds.length > 0) {
+            suggested_actions.push({
+                tool_name: "get-task",
+                parameters: { id: taskIds[0] },
+                reason: "View details of the first task created.",
+                user_facing_suggestion: `View details of the first task ('${tasks[0]?.title || taskIds[0]}')?`
+            });
+        }
         return {
             content: [
                 {
                     type: "text",
                     text: taskListText
                 }
-            ]
+            ],
+            suggested_actions
         };
     }
     catch (error) {
@@ -81,7 +99,8 @@ export async function parsePrdHandler(taskManager, params) {
                     type: "text",
                     text: `Error parsing PRD: ${error.message || String(error)}`
                 }
-            ]
+            ],
+            isError: true
         };
     }
 }

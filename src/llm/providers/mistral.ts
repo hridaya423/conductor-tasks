@@ -1,6 +1,6 @@
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult, LLMUsage } from '../types.js';
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
-import { Mistral } from '@mistralai/mistralai';
+import { Mistral } from '@mistralai/mistralai'; 
 import process from 'process';
 
 export class MistralProvider implements LLMProvider {
@@ -40,7 +40,9 @@ export class MistralProvider implements LLMProvider {
 
   async generate(request: LLMRequest): Promise<LLMResponse> {
     try {
+
       const systemPrompt = request.systemPrompt || '';
+      
       const userPrompt = request.prompt;
 
       const messages = [];
@@ -76,6 +78,7 @@ export class MistralProvider implements LLMProvider {
           totalTokens: response.usage?.totalTokens || 0
         }
       };
+
     } catch (error) {
       console.error('Mistral API error:', error);
       throw new Error(`Mistral API error: ${error}`);
@@ -113,7 +116,6 @@ export class MistralClient implements LLMClient {
     } else if (process.env.MODEL && (process.env.MODEL.includes('mistral') || process.env.MODEL.includes('mixtral'))) {
       this.model = process.env.MODEL;
     } else {
-      
       this.model = 'mistral-large-latest';
     }
 
@@ -125,7 +127,7 @@ export class MistralClient implements LLMClient {
     }
   }
 
-  async complete(options: LLMCompletionOptions): Promise<string> {
+  async complete(options: LLMCompletionOptions): Promise<LLMCompletionResult> {
     const {
       prompt,
       systemPrompt,
@@ -154,66 +156,76 @@ export class MistralClient implements LLMClient {
         });
 
         let fullResponse = '';
-        for await (const chunk of streamResponse) {
+        let finishReason: string | undefined = undefined;
+        let usage: LLMUsage | null = null;
+
+        for await (const chunk of streamResponse) { 
+          const choices = (chunk as any).choices; 
+          if (choices && choices.length > 0) {
+            const choice = choices[0];
+            if (choice.delta && choice.delta.content) {
+              const content = choice.delta.content;
+              fullResponse += content;
+              onStreamUpdate(content);
+            }
+            if (choice.finish_reason) { 
+              finishReason = choice.finish_reason;
+            }
+          }
           
           
           
-          const content = this.extractStreamContent(chunk);
-          if (content) {
-            fullResponse += content;
-            onStreamUpdate(content);
+          
+          if ((chunk as any).usage) { 
+            const chunkUsage = (chunk as any).usage;
+            usage = {
+              promptTokens: chunkUsage.promptTokens || chunkUsage.prompt_tokens || 0,
+              completionTokens: chunkUsage.completionTokens || chunkUsage.completion_tokens || 0,
+              totalTokens: chunkUsage.totalTokens || chunkUsage.total_tokens || 0,
+            };
           }
         }
+        return {
+          text: fullResponse,
+          usage: usage,
+          model: this.model,
+          finishReason: finishReason,
+        };
 
-        return fullResponse;
       } else {
-        
         const response = await this.client.chat.complete({
           model: this.model,
           messages: messages,
           temperature: temperature,
           maxTokens: maxTokens,
-          topP: topP
+          topP: topP,
         });
-
         
-        return String(response.choices?.[0]?.message.content || 'No response from Mistral API');
+        const text = String(response.choices?.[0]?.message.content || 'No response from Mistral API');
+        const responseUsage = response.usage; 
+        const usage: LLMUsage | null = responseUsage
+          ? {
+              promptTokens: responseUsage.promptTokens, 
+              completionTokens: responseUsage.completionTokens, 
+              totalTokens: responseUsage.totalTokens, 
+            }
+          : null;
+
+        return {
+          text: text,
+          usage: usage,
+          model: response.model || this.model,
+          finishReason: response.choices && response.choices.length > 0 ? response.choices[0].finishReason : undefined, 
+        };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Mistral API error:', error);
-      return `Error: ${error}`;
+      throw new Error(`Mistral API error: ${error.message || String(error)}`);
     }
   }
 
   
-  private extractStreamContent(chunk: any): string {
-    
-    try {
-      
-      if (chunk.choices && chunk.choices[0]?.delta?.content) {
-        return chunk.choices[0].delta.content;
-      }
-      
-      if (chunk.delta && (typeof chunk.delta.text === 'string')) {
-        return chunk.delta.text;
-      }
-      
-      
-      if (chunk.content) {
-        return chunk.content;
-      }
-      
-      
-      if (chunk.message && chunk.message.content) {
-        return chunk.message.content;
-      }
-      
-      return '';
-    } catch (e) {
-      console.warn('Error extracting content from Mistral stream chunk:', e);
-      return '';
-    }
-  }
+  
 
   getProviderName(): string {
     return this.providerName;

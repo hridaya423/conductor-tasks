@@ -1,9 +1,12 @@
 import { ContextItem, ContextPriority } from './types.js';
+import { IDERulesManager } from '../ide/ideRulesManager.js';
+import logger from './logger.js';
 
 export class ContextManager {
   private contextItems: Map<string, ContextItem> = new Map();
   private projectContext: string = '';
   private anchorPoints: Set<string> = new Set();
+  private ideRulesManager?: IDERulesManager;
 
   setProjectContext(context: string): void {
     this.projectContext = context;
@@ -99,5 +102,15 @@ export class ContextManager {
     }
 
     this.contextItems = contextToKeep;
+  }
+
+  public setIDERulesManager(ideRulesManager: IDERulesManager): void {
+    this.ideRulesManager = ideRulesManager;
+    logger.debug('IDE Rules Manager set in context');
+  }
+
+  
+  public getIDERulesManager(): IDERulesManager | undefined {
+    return this.ideRulesManager;
   }
 }

@@ -1,5 +1,5 @@
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult, LLMUsage } from '../types.js';
 import process from 'process';
 import fetch from 'node-fetch';
 import { Readable } from 'stream';
@@ -70,6 +70,7 @@ export class OllamaProvider implements LLMProvider {
 }
 
 export class OllamaClient implements LLMClient {
+  
   private baseUrl: string;
   private model: string;
 
@@ -78,7 +79,7 @@ export class OllamaClient implements LLMClient {
     this.model = model || process.env.OLLAMA_MODEL || 'llama3';
   }
 
-  async complete(options: LLMCompletionOptions): Promise<string> {
+  async complete(options: LLMCompletionOptions): Promise<LLMCompletionResult> {
     const {
       prompt,
       systemPrompt,
@@ -117,30 +118,44 @@ export class OllamaClient implements LLMClient {
         const buffer: Buffer[] = [];
         const stream = Readable.fromWeb(response.body as any);
         const decoder = new TextDecoder();
-        let fullResponse = '';
+        let fullResponseText = '';
+        let usage: LLMUsage | null = null;
+        
 
         for await (const chunk of stream) {
-          buffer.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          const textChunk = decoder.decode(chunk, { stream: true });
           
-          
-          const lines = textChunk.split('\n').filter(Boolean);
+          const lines = decoder.decode(chunk, { stream: true }).split('\n').filter(Boolean);
           for (const line of lines) {
             try {
               const data = JSON.parse(line);
               if (data.response) {
-                fullResponse += data.response;
+                fullResponseText += data.response;
                 onStreamUpdate(data.response);
               }
+              if (data.done === true) { 
+                if (typeof data.prompt_eval_count === 'number' && typeof data.eval_count === 'number') {
+                  usage = {
+                    promptTokens: data.prompt_eval_count,
+                    completionTokens: data.eval_count,
+                    totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+                  };
+                }
+                
+              }
             } catch (e) {
-              console.warn('Error parsing Ollama stream chunk:', e);
+              console.warn('Error parsing Ollama stream chunk:', line, e);
             }
           }
         }
-
-        return fullResponse;
-      } else {
         
+        return {
+          text: fullResponseText,
+          usage: usage,
+          model: this.model,
+          finishReason: undefined, 
+        };
+
+      } else {
         const response = await fetch(`${this.baseUrl}/api/generate`, {
           method: 'POST',
           headers: {
@@ -152,19 +167,35 @@ export class OllamaClient implements LLMClient {
             system: systemPrompt || '',
             temperature: temperature,
             max_tokens: maxTokens,
+            stream: false, 
           }),
         });
 
         if (!response.ok) {
-          throw new Error(`Ollama API error: ${response.statusText}`);
+          const errorBody = await response.text();
+          throw new Error(`Ollama API error: ${response.statusText} - ${errorBody}`);
         }
 
         const data = await response.json() as any;
-        return data.response || '';
+        const text = data.response || '';
+        const usage: LLMUsage | null = (typeof data.prompt_eval_count === 'number' && typeof data.eval_count === 'number')
+          ? {
+              promptTokens: data.prompt_eval_count,
+              completionTokens: data.eval_count,
+              totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+            }
+          : null;
+          
+        return {
+          text: text,
+          usage: usage,
+          model: this.model, 
+          finishReason: undefined, 
+        };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Ollama API error:', error);
-      return `Error: ${error}`;
+      throw new Error(`Ollama API error: ${error.message || String(error)}`);
     }
   }
 
@@ -175,4 +206,4 @@ export class OllamaClient implements LLMClient {
   getModelName(): string {
     return this.model;
   }
-} 
+}

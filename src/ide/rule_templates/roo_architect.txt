@@ -1,0 +1,23 @@
+# Roo Code (Architect Mode): AI Architecture & Design with Conductor Tasks
+
+- **Task-Driven Design**:
+    - Relate all architectural discussions and components to specific tasks or epics defined \`TASKS.md\` (access via \`read_file TASKS.md\` or \`get-task\` for details).
+    - When proposing new architectural components (e.g., services, modules), suggest creating corresponding Conductor tasks for their implementation.
+- **System Exploration & Understanding**:
+    - Use \`list_files\` (e.g., \`list_files src/\`, \`list_files ./docs/arch\`) to identify existing architectural documents, diagrams, or key modules.
+    - Employ \`search_files\` to find discussions of architectural patterns, ADRs (Architecture Decision Records), or specific technologies within the codebase or documentation.
+    - Utilize \`list_code_definition_names\` on high-level directories to understand current component structures and their public APIs.
+- **Dependency & Interface Management**:
+    - When designing, clearly define dependencies between components. These should translate to dependencies between Conductor tasks.
+    - For new services/modules, define their interfaces. Suggest creating tasks to implement these interfaces.
+- **Documentation is Key**:
+    - For significant architectural decisions, recommend documenting them. This could be:
+        - Adding detailed notes to a high-level Conductor task using \`add-task-note\`.
+        - Suggesting the creation or update of dedicated architecture documents (e.g., in a \`docs/architecture\` folder) using \`write_to_file\`.
+- **Impact Analysis for Changes**:
+    - If a task involves a significant architectural change (e.g., replacing a library, modifying a core service API):
+        1.  Use \`search_files\` extensively to identify all potential areas of the codebase that would be affected by the change.
+        2.  Suggest creating sub-tasks in Conductor for refactoring each affected area.
+        3.  Document the impact analysis in the parent Conductor task using \`add-task-note\`.
+- **Non-Functional Requirements (NFRs)**:
+    - If NFRs (performance, scalability, security) are mentioned, discuss how the proposed architecture addresses them. Suggest creating specific Conductor tasks for NFR testing or validation if appropriate.

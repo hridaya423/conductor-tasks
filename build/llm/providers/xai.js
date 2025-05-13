@@ -58,14 +58,23 @@ export class XaiClient {
                 stream: true
             });
             let fullResponse = '';
+            let finishReason = undefined;
             for await (const chunk of stream) {
                 const content = chunk.choices[0]?.delta?.content || '';
                 if (content) {
                     fullResponse += content;
                     onStreamUpdate(content);
                 }
+                if (chunk.choices[0]?.finish_reason) {
+                    finishReason = chunk.choices[0].finish_reason;
+                }
             }
-            return fullResponse;
+            return {
+                text: fullResponse,
+                usage: null,
+                model: this.model,
+                finishReason: finishReason,
+            };
         }
         else {
             const response = await this.client.chat.completions.create({
@@ -73,9 +82,22 @@ export class XaiClient {
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: maxTokens,
                 temperature: temperature,
-                top_p: topP
+                top_p: topP,
             });
-            return response.choices[0]?.message?.content || '';
+            const text = response.choices[0]?.message?.content || '';
+            const usage = response.usage
+                ? {
+                    promptTokens: response.usage.prompt_tokens,
+                    completionTokens: response.usage.completion_tokens,
+                    totalTokens: response.usage.total_tokens,
+                }
+                : null;
+            return {
+                text: text,
+                usage: usage,
+                model: response.model || this.model,
+                finishReason: response.choices[0]?.finish_reason || undefined,
+            };
         }
     }
     getProviderName() {

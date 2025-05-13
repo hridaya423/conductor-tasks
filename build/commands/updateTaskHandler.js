@@ -21,13 +21,19 @@ function checkTaskManagerInitialized(taskManager) {
                 type: "text",
                 text: "Task system is not initialized. Please run 'initialize-tasks' command first."
             }
-        ]
+        ],
+        suggested_actions: [{
+                tool_name: "initialize-tasks",
+                parameters: { projectName: "New Project", projectDescription: "Default project description", filePath: "./TASKS.md" },
+                reason: "The task system needs to be initialized before tasks can be updated.",
+                user_facing_suggestion: "Initialize the task system now?"
+            }]
     };
 }
 export async function updateTaskHandler(taskManager, params) {
-    const notInitialized = checkTaskManagerInitialized(taskManager);
-    if (notInitialized)
-        return notInitialized;
+    const notInitializedResult = checkTaskManagerInitialized(taskManager);
+    if (notInitializedResult)
+        return notInitializedResult;
     try {
         const { id, title, description, priority, status, tags, complexity } = params;
         const updates = {};
@@ -90,18 +96,36 @@ export async function updateTaskHandler(taskManager, params) {
                         type: "text",
                         text: `Error: Task with ID ${id} not found`
                     }
-                ]
+                ],
+                isError: true
             };
         }
         taskManager.saveTasks();
         logger.info(`Task ${id} updated successfully.`);
+        const suggested_actions = [
+            {
+                tool_name: "get-task",
+                parameters: { id: id },
+                reason: "View the updated details of the task.",
+                user_facing_suggestion: `View updated task '${updatedTask.title}' (ID: ${id})?`
+            }
+        ];
+        if (updatedTask.status === TaskStatus.TODO || updatedTask.status === TaskStatus.IN_PROGRESS) {
+            suggested_actions.push({
+                tool_name: "generate-steps",
+                parameters: { taskId: id },
+                reason: "Generate or update implementation steps for this task.",
+                user_facing_suggestion: `Generate implementation steps for '${updatedTask.title}'?`
+            });
+        }
         return {
             content: [
                 {
                     type: "text",
-                    text: `Task ${id} updated successfully. TASKS.md has been automatically updated.`
+                    text: `Task ${id} ("${updatedTask.title}") updated successfully. TASKS.md has been automatically updated.`
                 }
-            ]
+            ],
+            suggested_actions
         };
     }
     catch (error) {
@@ -112,7 +136,8 @@ export async function updateTaskHandler(taskManager, params) {
                     type: "text",
                     text: `Error updating task ${params.id}: ${error.message || String(error)}`
                 }
-            ]
+            ],
+            isError: true
         };
     }
 }

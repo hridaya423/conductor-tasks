@@ -85,28 +85,50 @@ export class PerplexityClient {
                     stream: true
                 });
                 let fullResponse = '';
+                let finishReason = undefined;
                 for await (const chunk of response) {
                     const content = chunk.choices[0]?.delta?.content || '';
                     if (content) {
                         fullResponse += content;
                         onStreamUpdate(content);
                     }
+                    if (chunk.choices[0]?.finish_reason) {
+                        finishReason = chunk.choices[0].finish_reason;
+                    }
                 }
-                return fullResponse;
+                return {
+                    text: fullResponse,
+                    usage: null,
+                    model: this.model,
+                    finishReason: finishReason,
+                };
             }
             else {
                 const response = await this.client.chat.completions.create({
                     model: this.model,
                     messages,
                     temperature,
-                    max_tokens: maxTokens
+                    max_tokens: maxTokens,
                 });
-                return response.choices[0].message.content || '';
+                const text = response.choices[0]?.message?.content || '';
+                const usage = response.usage
+                    ? {
+                        promptTokens: response.usage.prompt_tokens,
+                        completionTokens: response.usage.completion_tokens,
+                        totalTokens: response.usage.total_tokens,
+                    }
+                    : null;
+                return {
+                    text: text,
+                    usage: usage,
+                    model: response.model || this.model,
+                    finishReason: response.choices[0]?.finish_reason || undefined,
+                };
             }
         }
         catch (error) {
             console.error('Perplexity API error:', error);
-            return `Error: ${error}`;
+            throw new Error(`Perplexity API error: ${error.message || String(error)}`);
         }
     }
     getProviderName() {

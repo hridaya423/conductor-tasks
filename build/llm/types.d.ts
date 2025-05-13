@@ -1,5 +1,16 @@
+export interface LLMUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+export interface LLMCompletionResult {
+    text: string;
+    usage: LLMUsage | null;
+    model?: string;
+    finishReason?: string;
+}
 export interface LLMClient {
-    complete(options: LLMCompletionOptions): Promise<string>;
+    complete(options: LLMCompletionOptions): Promise<LLMCompletionResult>;
     getProviderName(): string;
     getModelName(): string;
 }

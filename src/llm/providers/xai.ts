@@ -1,5 +1,5 @@
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult, LLMUsage } from '../types.js';
 import OpenAI from 'openai';
 import process from 'process';
 
@@ -64,7 +64,7 @@ export class XaiClient implements LLMClient {
     this.model = model || process.env.MODEL || 'grok-1';
   }
 
-  async complete(options: LLMCompletionOptions): Promise<string> {
+  async complete(options: LLMCompletionOptions): Promise<LLMCompletionResult> {
     const {
       prompt,
       maxTokens = 4000,
@@ -86,26 +86,49 @@ export class XaiClient implements LLMClient {
       });
 
       let fullResponse = '';
+      let finishReason: string | undefined = undefined;
+
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
           fullResponse += content;
           onStreamUpdate(content);
         }
+        if (chunk.choices[0]?.finish_reason) {
+          finishReason = chunk.choices[0].finish_reason;
+        }
       }
 
-      return fullResponse;
+      return {
+        text: fullResponse,
+        usage: null, 
+        model: this.model,
+        finishReason: finishReason,
+      };
     } else {
-
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: maxTokens,
         temperature: temperature,
-        top_p: topP
+        top_p: topP,
       });
 
-      return response.choices[0]?.message?.content || '';
+      const text = response.choices[0]?.message?.content || '';
+      const usage: LLMUsage | null = response.usage
+        ? {
+            promptTokens: response.usage.prompt_tokens,
+            completionTokens: response.usage.completion_tokens,
+            totalTokens: response.usage.total_tokens,
+          }
+        : null;
+
+      return {
+        text: text,
+        usage: usage,
+        model: response.model || this.model,
+        finishReason: response.choices[0]?.finish_reason || undefined,
+      };
     }
   }
 

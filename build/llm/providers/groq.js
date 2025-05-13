@@ -56,7 +56,7 @@ export class GroqClient {
         this.client = new Groq({
             apiKey: apiKey
         });
-        this.model = model || process.env.MODEL || 'llama3-70b-8192';
+        this.model = process.env.GROQ_MODEL || model || 'deepseek-r1-distill-llama-70b';
     }
     async complete(options) {
         const { prompt, maxTokens = 4000, temperature = 0.7, topP, systemPrompt, stream, onStreamUpdate } = options;
@@ -76,14 +76,31 @@ export class GroqClient {
                     stream: true
                 });
                 let fullResponse = '';
+                let finishReason = undefined;
+                let usage = null;
                 for await (const chunk of response) {
                     const content = chunk.choices[0]?.delta?.content || '';
                     if (content) {
                         fullResponse += content;
                         onStreamUpdate(content);
                     }
+                    if (chunk.choices[0]?.finish_reason) {
+                        finishReason = chunk.choices[0].finish_reason;
+                    }
+                    if (chunk.x_groq?.usage) {
+                        usage = {
+                            promptTokens: chunk.x_groq.usage.prompt_tokens || 0,
+                            completionTokens: chunk.x_groq.usage.completion_tokens || 0,
+                            totalTokens: chunk.x_groq.usage.total_tokens || 0,
+                        };
+                    }
                 }
-                return fullResponse;
+                return {
+                    text: fullResponse,
+                    usage: usage,
+                    model: this.model,
+                    finishReason: finishReason,
+                };
             }
             else {
                 const response = await this.client.chat.completions.create({
@@ -91,14 +108,28 @@ export class GroqClient {
                     messages: messages,
                     max_tokens: maxTokens,
                     temperature: temperature,
-                    top_p: topP
+                    top_p: topP,
                 });
-                return response.choices[0]?.message?.content || '';
+                const text = response.choices[0]?.message?.content || '';
+                const responseUsage = response.usage;
+                const usage = responseUsage
+                    ? {
+                        promptTokens: responseUsage.prompt_tokens,
+                        completionTokens: responseUsage.completion_tokens,
+                        totalTokens: responseUsage.total_tokens,
+                    }
+                    : null;
+                return {
+                    text: text,
+                    usage: usage,
+                    model: response.model || this.model,
+                    finishReason: response.choices[0]?.finish_reason || undefined,
+                };
             }
         }
         catch (error) {
             console.error('Groq API error:', error);
-            return `Error: ${error}`;
+            throw new Error(`Groq API error: ${error.message || String(error)}`);
         }
     }
     getProviderName() {

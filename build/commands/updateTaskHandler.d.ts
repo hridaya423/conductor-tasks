@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
+import { ToolResultWithNextSteps } from "../core/types.js";
 export declare const UpdateTaskSchema: {
     id: z.ZodString;
     title: z.ZodOptional<z.ZodString>;
@@ -9,9 +10,4 @@ export declare const UpdateTaskSchema: {
     tags: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
     complexity: z.ZodOptional<z.ZodNumber>;
 };
-export declare function updateTaskHandler(taskManager: TaskManager, params: z.infer<z.ZodObject<typeof UpdateTaskSchema>>): Promise<{
-    content: {
-        type: "text";
-        text: string;
-    }[];
-}>;
+export declare function updateTaskHandler(taskManager: TaskManager, params: z.infer<z.ZodObject<typeof UpdateTaskSchema>>): Promise<ToolResultWithNextSteps>;

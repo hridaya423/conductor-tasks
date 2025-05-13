@@ -2,16 +2,16 @@ import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { TaskStatus, TaskPriority } from "../core/types.js";
+import { TaskStatus, TaskPriority, ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const VisualizeTasksDashboardSchema = {};
 
 export async function visualizeTasksDashboardHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof VisualizeTasksDashboardSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
-  const notInitialized = checkTaskManagerInitialized(taskManager);
-  if (notInitialized) return notInitialized;
+): Promise<ToolResultWithNextSteps> {
+  const notInitializedResult = checkTaskManagerInitialized(taskManager);
+  if (notInitializedResult) return notInitializedResult;
 
   try {
     logger.info('Visualizing tasks dashboard');
@@ -23,9 +23,15 @@ export async function visualizeTasksDashboardHandler(
         content: [
           {
             type: "text",
-            text: "No tasks found in the system."
+            text: "No tasks found in the system. Consider creating some tasks."
           }
-        ]
+        ],
+        suggested_actions: [{
+            tool_name: "create-task",
+            parameters: { title: "First Task", description: "Details for the first task." },
+            reason: "No tasks exist to visualize.",
+            user_facing_suggestion: "Create your first task?"
+        }]
       };
     }
 
@@ -99,13 +105,27 @@ export async function visualizeTasksDashboardHandler(
 
     logger.info(`Generated dashboard with ${totalTasks} total tasks.`);
 
+    const suggested_actions: SuggestedAction[] = [
+        {
+            tool_name: "list-tasks",
+            reason: "View the full list of tasks.",
+            user_facing_suggestion: "List all tasks?"
+        },
+        {
+            tool_name: "kanban",
+            reason: "View tasks in a Kanban board.",
+            user_facing_suggestion: "Show Kanban board?"
+        }
+    ];
+
     return {
       content: [
         {
           type: "text",
           text: dashboard
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error displaying dashboard:', { error });
@@ -115,7 +135,8 @@ export async function visualizeTasksDashboardHandler(
           type: "text",
           text: `Error displaying dashboard: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

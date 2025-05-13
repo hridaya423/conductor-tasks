@@ -11,7 +11,8 @@ import logger from "./core/logger.js";
 import { ContextManager } from "./core/contextManager.js";
 import { LLMManager } from "./llm/llmManager.js";
 import { TaskManager } from "./task/taskManager.js";
-import { TaskPriority, TaskStatus, Task } from "./core/types.js";
+import { TaskPriority, TaskStatus, Task, IDEType } from "./core/types.js";
+import { IDERulesManager } from "./ide/ideRulesManager.js";
 import { checkTaskManagerInitialized } from "./core/checkInit.js";
 import { CreateTaskSchema, createTaskHandler } from "./commands/createTaskHandler.js";
 import { UpdateTaskSchema, updateTaskHandler } from "./commands/updateTaskHandler.js";
@@ -21,7 +22,7 @@ import { AddTaskNoteSchema, addTaskNoteHandler } from "./commands/addTaskNoteHan
 import { GetNextTaskSchema, getNextTaskHandler } from "./commands/getNextTaskHandler.js";
 import { ParsePrdSchema, parsePrdHandler } from "./commands/parsePrdHandler.js";
 import { DeleteTaskSchema, deleteTaskHandler } from "./commands/deleteTaskHandler.js";
-import { InitializeTasksSchema, initializeTasksHandler } from "./commands/initializeTasksHandler.js";
+import { InitializeProjectSchema, initializeProjectHandler } from "./commands/initializeProjectHandler.js";
 import { GenerateImplementationStepsSchema, generateImplementationStepsHandler } from "./commands/generateImplementationStepsHandler.js";
 import { ExpandTaskSchema, expandTaskHandler } from "./commands/expandTaskHandler.js";
 import { SuggestTaskImprovementsSchema, suggestTaskImprovementsHandler } from "./commands/suggestTaskImprovementsHandler.js";
@@ -48,7 +49,7 @@ const addTaskNoteSchemaObject = z.object(AddTaskNoteSchema);
 const getNextTaskSchemaObject = z.object(GetNextTaskSchema);
 const parsePrdSchemaObject = z.object(ParsePrdSchema);
 const deleteTaskSchemaObject = z.object(DeleteTaskSchema);
-const initializeTasksSchemaObject = z.object(InitializeTasksSchema);
+const initializeProjectSchemaObject = z.object(InitializeProjectSchema);
 const generateImplementationStepsSchemaObject = z.object(GenerateImplementationStepsSchema);
 const expandTaskSchemaObject = z.object(ExpandTaskSchema);
 const suggestTaskImprovementsSchemaObject = z.object(SuggestTaskImprovementsSchema);
@@ -59,10 +60,14 @@ const visualizeTasksDashboardSchemaObject = z.object(VisualizeTasksDashboardSche
 const parsePrdFileSchemaObject = z.object(ParsePrdFileSchema);
 
 function setupTaskManager(filePath?: string): TaskManager {
-    const effectivePath = filePath 
-        ? path.resolve(process.cwd(), filePath) 
-        : path.resolve(process.cwd(), 'TASKS.md');
     
+    
+    const workspaceRoot = taskManager.getWorkspaceRoot() || process.cwd(); 
+    
+    const effectivePath = filePath 
+        ? path.resolve(workspaceRoot, filePath) 
+        : path.resolve(workspaceRoot, taskManager['config']?.tasksFileName || 'TASKS.md'); 
+
     const projectName = path.basename(path.dirname(effectivePath));
     const dir = path.dirname(effectivePath);
 
@@ -137,24 +142,36 @@ async function runInitializeCliCommand(
             projectName: projectName,
             projectDescription: projectDescription
         };
-        const validatedParams = initializeTasksSchemaObject.parse(params);
+        const validatedParams = initializeProjectSchemaObject.parse(params);
 
-        const result = await initializeTasksHandler(tm, validatedParams);
+        const result = await initializeProjectHandler(tm, validatedParams);
         console.log(formatOutput(result));
     } catch (error: any) {
-        logger.error(`CLI command 'initialize-tasks' failed: ${error.message}`, error);
+        logger.error(`CLI command 'init-project' failed: ${error.message}`, error);
         console.error(`Error: ${error.message}`);
         process.exit(1);
     }
 }
 
 async function startMcpServer() {
+    process.env.MCP_MODE = "true";
+    
+    
+    if (!process.env.IDE) {
+        
+        process.env.IDE = "cursor";
+        logger.info(`No IDE environment variable found, setting default: ${process.env.IDE}`);
+    } else {
+        logger.info(`Using IDE environment variable: ${process.env.IDE}`);
+    }
+    
     logger.info(`
 ========================================================
 Conductor Task Management System Starting (MCP Mode)
 ========================================================
 Current directory: ${process.cwd()}
 Default Tasks file path: ${path.join(process.cwd(), 'TASKS.md')}
+IDE Type: ${process.env.IDE}
 ========================================================
 `);
 
@@ -165,7 +182,31 @@ Default Tasks file path: ${path.join(process.cwd(), 'TASKS.md')}
         logger.info(`Task count: ${tm.getTaskCount()}`);
         logger.info(`TaskManager initialized: ${tm.isInitialized()}`);
     } else {
-        logger.warn(`TASKS.md not found at ${tm.getTasksFilePath()}. Use 'initialize-tasks' tool.`);
+        logger.warn(`TASKS.md not found at ${tm.getTasksFilePath()}. Use 'initialize-project' tool.`);
+    }
+    
+    try {
+        
+        const ideRulesManager = IDERulesManager.getInstance();
+        
+        ideRulesManager.setIDEType(process.env.IDE.toLowerCase() as IDEType);
+        await ideRulesManager.loadRules();
+        
+        const currentIdeType = ideRulesManager.getIDEType();
+        logger.info(`Using IDE type: ${currentIdeType}`);
+        
+        const ideRules = await ideRulesManager.getRules();
+        if (ideRules) {
+            logger.info(`Loaded ${ideRules.rules.length} IDE-specific rules`);
+        } else {
+            logger.warn('No IDE-specific rules loaded');
+        }
+        
+        
+        contextManager.setIDERulesManager(ideRulesManager);
+    } catch (error) {
+        logger.error('Failed to initialize IDERulesManager', { error });
+        
     }
 
     logger.info('=== Conductor Task Management System Started (MCP Mode) ===');
@@ -186,7 +227,7 @@ Default Tasks file path: ${path.join(process.cwd(), 'TASKS.md')}
         CreateTaskSchema, 
         async (params) => {
             
-            return createTaskHandler(tm, params);
+            return createTaskHandler(tm, params) as any;
         }
     );
     
@@ -194,112 +235,155 @@ Default Tasks file path: ${path.join(process.cwd(), 'TASKS.md')}
         "update-task", 
         "Update an existing task's details", 
         UpdateTaskSchema, 
-        async (params) => updateTaskHandler(tm, params)
+        async (params) => updateTaskHandler(tm, params) as any
     );
     
     server.tool(
         "list-tasks", 
         "Get a list of tasks with filtering and sorting options", 
         ListTasksSchema, 
-        async (params) => listTasksHandler(tm, params)
+        async (params) => listTasksHandler(tm, params) as any 
     );
     
     server.tool(
         "get-task", 
         "Get details of a specific task", 
         GetTaskSchema, 
-        async (params) => getTaskHandler(tm, params)
+        async (params) => getTaskHandler(tm, params) as any
     );
     
     server.tool(
         "add-task-note", 
         "Add a note, progress update, or comment to a task", 
         AddTaskNoteSchema, 
-        async (params) => addTaskNoteHandler(tm, params)
+        async (params) => addTaskNoteHandler(tm, params) as any
     );
     
     server.tool(
         "get-next-task", 
         "Get the next task to work on", 
         GetNextTaskSchema, 
-        async (params) => getNextTaskHandler(tm, params)
+        async (params) => getNextTaskHandler(tm, params) as any
     );
     
     server.tool(
         "parse-prd", 
         "Parse a PRD (Product Requirements Document) and create tasks from it", 
         ParsePrdSchema, 
-        async (params) => parsePrdHandler(tm, params)
+        async (params) => parsePrdHandler(tm, params) as any
     );
     
     server.tool(
         "delete-task", 
         "Delete a task", 
         DeleteTaskSchema, 
-        async (params) => deleteTaskHandler(tm, params)
+        async (params) => deleteTaskHandler(tm, params) as any
     );
     
     server.tool(
-        "initialize-tasks", 
-        "Initialize the task management system and create TASKS.md", 
-        InitializeTasksSchema, 
-        async (params) => initializeTasksHandler(tm, params)
+        "initialize-project", 
+        "Initialize the project, including task management (TASKS.md) and IDE rules.", 
+        InitializeProjectSchema, 
+        async (params) => initializeProjectHandler(tm, params) as any
     );
     
     server.tool(
         "generate-implementation-steps", 
         "Generate detailed implementation steps for a task", 
         GenerateImplementationStepsSchema, 
-        async (params) => generateImplementationStepsHandler(tm, params)
+        async (params) => generateImplementationStepsHandler(tm, params) as any
     );
     
     server.tool(
         "expand-task", 
         "Expand a task with more detailed information and subtasks", 
         ExpandTaskSchema, 
-        async (params) => expandTaskHandler(tm, params)
+        async (params) => expandTaskHandler(tm, params) as any
     );
     
     server.tool(
         "suggest-task-improvements", 
         "Get AI suggestions for improving a task", 
         SuggestTaskImprovementsSchema, 
-        async (params) => suggestTaskImprovementsHandler(tm, params)
+        async (params) => suggestTaskImprovementsHandler(tm, params) as any
     );
     
     server.tool(
         "help-implement-task", 
         "Get AI assistance to implement a specific task", 
         HelpImplementTaskSchema, 
-        async (params) => helpImplementTaskHandler(tm, llmManager, contextManager, params)
+        async (params) => helpImplementTaskHandler(tm, llmManager, contextManager, params) as any
     );
     
     server.tool(
         "visualize-tasks-kanban", 
         "Display tasks in a Kanban board view", 
         VisualizeTasksKanbanSchema, 
-        async (params) => visualizeTasksKanbanHandler(tm, params)
+        async (params) => visualizeTasksKanbanHandler(tm, params) as any
     );
     
     server.tool(
         "visualize-tasks-dependency-tree", 
         "Display task dependency tree", 
         VisualizeTasksDependencyTreeSchema, 
-        async (params) => visualizeTasksDependencyTreeHandler(tm, params)
+        async (params) => visualizeTasksDependencyTreeHandler(tm, params) as any
     );
     
     server.tool(
         "visualize-tasks-dashboard", 
         "Display task dashboard with summary statistics", 
         VisualizeTasksDashboardSchema, 
-        async (params) => visualizeTasksDashboardHandler(tm, params)
+        async (params) => visualizeTasksDashboardHandler(tm, params) as any
     );
     
     server.tool(
         "parse-prd-file", 
         "Parse a PRD file from disk and extract tasks", 
         ParsePrdFileSchema, 
-        async (params) => parsePrdFileHandler(tm, params)
+        async (params) => parsePrdFileHandler(tm, params) as any
+    );
+
+    
+    server.tool(
+        "list-task-templates",
+        "List available task templates",
+        {}, 
+        async (params) => (await import('./commands/listTaskTemplatesHandler.js')).listTaskTemplatesHandler(tm) as any
+    );
+
+    server.tool(
+        "get-task-template",
+        "Get details of a specific task template",
+        (await import('./commands/getTaskTemplateHandler.js')).GetTaskTemplateSchema,
+        async (params) => (await import('./commands/getTaskTemplateHandler.js')).getTaskTemplateHandler(tm, params) as any
+    );
+
+    server.tool(
+        "create-task-from-template",
+        "Create a new task from a template",
+        (await import('./commands/createTaskFromTemplateHandler.js')).CreateTaskFromTemplateSchema,
+        async (params) => (await import('./commands/createTaskFromTemplateHandler.js')).createTaskFromTemplateHandler(tm, params) as any
+    );
+
+    server.tool(
+        "research-topic",
+        "Research a topic using available LLM capabilities (e.g., Perplexity, tool-calling for search).",
+        (await import('./commands/researchTopicHandler.js')).ResearchTopicSchema,
+        async (params) => (await import('./commands/researchTopicHandler.js')).researchTopicHandler(tm, llmManager, params) as any
+    );
+
+    server.tool(
+        "generate-diff",
+        "Generate a diff for a file based on a change description.",
+        (await import('./commands/generateDiffHandler.js')).GenerateDiffSchema,
+        async (params) => (await import('./commands/generateDiffHandler.js')).generateDiffHandler(tm, params) as any
+    );
+
+    server.tool(
+        "propose-diff",
+        "Propose a diff to be applied to a file. Currently acknowledges only; does not apply.",
+        (await import('./commands/proposeDiffHandler.js')).ProposeDiffSchema,
+        async (params) => (await import('./commands/proposeDiffHandler.js')).proposeDiffHandler(tm, params) as any
     );
 
     function isLLMAvailable(): boolean {
@@ -337,12 +421,12 @@ async function main() {
              default: false
         })
         .command(
-            'init',
-            'Initialize the task management system and create TASKS.md',
+            'init-project', 
+            'Initialize the project, including TASKS.md and IDE rules.', 
             (y: Argv<BaseArgs>) => y
                 .option('projectName', { type: 'string', desc: 'Name of the project (inferred from directory if not provided)' })
                 .option('projectDescription', { type: 'string', desc: 'Description of the project' })
-
+                .option('filePath', { type: 'string', alias: 'f', desc: 'Path to the TASKS.md file (overrides global -f if used here)'}) 
             ,
             (argv) => runInitializeCliCommand(argv)
         )

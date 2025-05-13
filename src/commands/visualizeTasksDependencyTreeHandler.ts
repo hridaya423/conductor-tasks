@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { Task, TaskStatus } from "../core/types.js";
+import { Task, TaskStatus, ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const VisualizeTasksDependencyTreeSchema = {
   taskId: z.string().optional().describe("ID of the task to show dependencies for (optional)")
@@ -11,9 +11,9 @@ export const VisualizeTasksDependencyTreeSchema = {
 export async function visualizeTasksDependencyTreeHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof VisualizeTasksDependencyTreeSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
-  const notInitialized = checkTaskManagerInitialized(taskManager);
-  if (notInitialized) return notInitialized;
+): Promise<ToolResultWithNextSteps> {
+  const notInitializedResult = checkTaskManagerInitialized(taskManager);
+  if (notInitializedResult) return notInitializedResult;
 
   try {
     const { taskId } = params;
@@ -27,14 +27,20 @@ export async function visualizeTasksDependencyTreeHandler(
       if (rootTasks.length === 0) {
         logger.info('No root tasks found for dependency tree visualization');
         return {
-          content: [
-            {
-              type: "text",
-              text: "No root tasks found. All tasks may be subtasks of other tasks."
-            }
-          ]
-        };
-      }
+        content: [
+          {
+            type: "text",
+            text: "No root tasks found. All tasks may be subtasks of other tasks. Consider creating a top-level task."
+          }
+        ],
+        suggested_actions: [{
+            tool_name: "create-task",
+            parameters: { title: "New Top-Level Task", description: "Details for the new top-level task." },
+            reason: "No root tasks exist to visualize in a tree.",
+            user_facing_suggestion: "Create a new top-level task?"
+        }]
+      };
+    }
 
       let dependencyTree = "# Task Dependency Tree\n\n";
 
@@ -57,29 +63,46 @@ export async function visualizeTasksDependencyTreeHandler(
 
       logger.info(`Generated dependency tree for all ${rootTasks.length} root tasks.`);
 
+      const suggested_actions_all: SuggestedAction[] = [
+        {
+            tool_name: "list-tasks",
+            reason: "View all tasks in a flat list.",
+            user_facing_suggestion: "List all tasks?"
+        }
+      ];
+      if (rootTasks.length > 0) {
+        suggested_actions_all.push({
+            tool_name: "visualize-tasks-dependency-tree",
+            parameters: { taskId: rootTasks[0].id },
+            reason: "View the dependency tree for the first root task.",
+            user_facing_suggestion: `View tree for task '${rootTasks[0].title}'?`
+        });
+      }
       return {
         content: [
           {
             type: "text",
             text: dependencyTree
           }
-        ]
+        ],
+        suggested_actions: suggested_actions_all
       };
-    } 
+    }
 
     else {
       const task = taskManager.getTask(taskId);
       if (!task) {
         logger.warn(`Task not found for dependency tree visualization: ${taskId}`);
         return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Task with ID ${taskId} not found.`
-            }
-          ]
-        };
-      }
+        content: [
+          {
+            type: "text",
+            text: `Error: Task with ID ${taskId} not found.`
+          }
+        ],
+        isError: true
+      };
+    }
 
       let dependencyTree = `# Dependency Tree for "${task.title}"\n\n`;
 
@@ -123,13 +146,28 @@ export async function visualizeTasksDependencyTreeHandler(
 
       logger.info(`Generated dependency tree for specific task: ${taskId}`);
 
+      const suggested_actions_single: SuggestedAction[] = [
+        {
+            tool_name: "get-task",
+            parameters: { id: taskId },
+            reason: "View the details of this task.",
+            user_facing_suggestion: `View details for task '${task.title}'?`
+        },
+        {
+            tool_name: "visualize-tasks-dependency-tree",
+            
+            reason: "View the dependency tree for all root tasks.",
+            user_facing_suggestion: "Show full project dependency tree?"
+        }
+      ];
       return {
         content: [
           {
             type: "text",
             text: dependencyTree
           }
-        ]
+        ],
+        suggested_actions: suggested_actions_single
       };
     }
   } catch (error: any) {
@@ -140,7 +178,8 @@ export async function visualizeTasksDependencyTreeHandler(
           type: "text",
           text: `Error displaying dependency tree: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

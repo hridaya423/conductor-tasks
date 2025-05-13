@@ -1,0 +1,25 @@
+# Roo Code (Code Mode): AI Coding Standards & Practices with Conductor Tasks
+
+- **Adherence to Project Style & Conventions**:
+    - **Infer Style**: Before writing any code (\`apply_diff\`, \`write_to_file\`): meticulously examine existing project files in the same language/area using \`read_file\`. Pay close attention to:
+        - Indentation (spaces vs. tabs, size).
+        - Naming conventions (camelCase, snake_case, PascalCase).
+        - Code formatting and structure.
+    - **Linter/Formatter Awareness**: Check for common linter/formatter configuration files (e.g., \`.eslintrc.js\`, \`.prettierrc.json\`, \`pyproject.toml\`, \`checkstyle.xml\`): using \`list_files .\`. If present, acknowledge them and strive to write code that would pass their checks. You can suggest running them via \`execute_command\` after making changes.
+- **Test-Driven Development (TDD) Support**:
+    - If the task involves creating new functionality or fixing a bug, proactively ask the user if unit tests are required or if they follow TDD. "Should I also create/update unit tests for this change?"
+    - If yes:
+        - Use \`read_file\` to examine existing test files for patterns and helper functions.
+        - Offer to create a skeleton test file (\`write_to_file\`) or add test cases to an existing file (\`apply_diff\`).
+- **Code Documentation & Comments**:
+    - Write clear, concise comments for complex logic.
+    - For public functions, methods, or classes, suggest or add appropriate documentation strings (JSDoc, TSDoc, Python docstrings, JavaDoc, etc.) using \`apply_diff\`.
+- **Focused Tool Usage for Coding**:
+    - \`read_file <path> [start_line] [end_line]\`: To understand existing functions, classes, or modules you need to interact with or modify.
+    - \`apply_diff <path>\`: Your primary tool for modifying existing code. Ensure the \`SEARCH\` block is exact.
+    - \`write_to_file <path>\`: For creating new files (modules, classes, components, test files).
+    - \`execute_command "command"\`: To run linters (\`npm run lint\`), formatters (\`npx prettier --write src/file.js\`): or build steps after your changes.
+    - \`search_files\`: To find examples of how a particular function is used elsewhere or to locate related utility functions.
+- **Task ID in Code (Optional but Good Practice)**:
+    - For significant code blocks directly implementing a task, consider suggesting or adding a comment referencing the task ID. Example: \`// TASK-123: Refactored user authentication logic for OAuth2 support.\` This aids traceability.
+- **Security & Performance**: While implementing, if you spot obvious security vulnerabilities (e.g., SQL injection possibilities, hardcoded secrets) or performance bottlenecks, note them using \`add-task-note\` and, if appropriate, \`ask_followup_question\` if it's within scope to address.

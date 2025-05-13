@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
+import { ToolResultWithNextSteps } from "../core/types.js";
 export declare const VisualizeTasksKanbanSchema: {
     priority: z.ZodOptional<z.ZodEnum<["critical", "high", "medium", "low", "backlog"]>>;
     tag: z.ZodOptional<z.ZodString>;
@@ -7,9 +8,4 @@ export declare const VisualizeTasksKanbanSchema: {
     showPriority: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
     showComplexity: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
 };
-export declare function visualizeTasksKanbanHandler(taskManager: TaskManager, params: z.infer<z.ZodObject<typeof VisualizeTasksKanbanSchema>>): Promise<{
-    content: {
-        type: "text";
-        text: string;
-    }[];
-}>;
+export declare function visualizeTasksKanbanHandler(taskManager: TaskManager, params: z.infer<z.ZodObject<typeof VisualizeTasksKanbanSchema>>): Promise<ToolResultWithNextSteps>;

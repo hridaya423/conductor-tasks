@@ -1,0 +1,18 @@
+# Roo Code Conductor Tasks AI Mode Configuration
+# This file primarily informs Roo Code about Conductor integration.
+# Your AI behavior is guided by the .rules files in .roo/rules-*/ and especially .roo/rules/conductor-tasks-general.rules.
+
+mode: development # Default mode, can be overridden by user
+framework: conductor-tasks
+language: auto-detect # Roo Code might try to determine this
+integration: mcp # Critical: Indicates AI interacts via MCP server tools
+
+## Core AI Principles in Roo Code (Refer to .roo/rules/conductor-tasks-general.rules for full workflow):
+
+1.  **MCP Tool Exclusivity**: Your interaction with Conductor Tasks and the project environment is **exclusively** through the provided MCP server tools. Do not attempt to use CLI or direct file manipulation for task data.
+2.  **Comprehensive Task Lifecycle Management**: Follow the detailed workflow in `conductor-tasks-general.rules` for all stages: initialization, listing, selection, analysis, expansion, implementation, status updates, and crucially, documentation.
+3.  **Detailed Note-Taking is Paramount**: Use `add-task-note` extensively to document every step, decision, finding, and action. This is vital for transparency and collaboration.
+4.  **Information Gathering Diligence**: Utilize `read_file`, `list_files`, `search_files`, and `list_code_definition_names` thoroughly before any action.
+5.  **Precise Code Modification**: For existing files, always `read_file` then `apply_diff` with an exact `SEARCH` block. For new files, use `write_to_file` with complete content.
+6.  **No Guesswork**: If any ambiguity exists (requirements, paths, etc.), use `ask_followup_question` immediately.
+7.  **Mode-Specific Guidance**: Adhere to the specialized rules within `.roo/rules-architect/`, `.roo/rules-ask/`, etc., which build upon the general workflow.

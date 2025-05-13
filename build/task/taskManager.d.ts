@@ -1,4 +1,4 @@
-import { Task, TaskPriority, TaskStatus, TaskNote } from '../core/types.js';
+import { Task, TaskPriority, TaskStatus, TaskNote, TaskTemplate, CodebaseAnalysisSummary } from '../core/types.js';
 import { LLMManager } from '../llm/llmManager.js';
 import { ContextManager } from '../core/contextManager.js';
 export declare class TaskManager {
@@ -52,15 +52,35 @@ export declare class TaskManager {
     private getPriorityEmoji;
     getTasksFilePath(): string;
     getTaskCount(): number;
+    getWorkspaceRoot(): string;
     reloadTasks(): boolean;
+    getStructuredCodebaseAnalysis(projectName?: string, projectDescription?: string): Promise<CodebaseAnalysisSummary | null>;
+    private determineProjectType;
+    private identifyKeyEntryPoints;
     analyzeCodebase(): Promise<string>;
+    private performDetailedFileAnalyses;
+    private extractSymbolsFromFile;
+    private _buildDependencyGraph;
+    private _getCodebaseContextString;
+    private extractFunctionSignature;
+    private getNodeComment;
+    private getTaskTemplatesDir;
+    listTaskTemplates(): Promise<string[]>;
+    getTaskTemplate(templateName: string): Promise<TaskTemplate | undefined>;
+    private _applyTemplateVariables;
+    private createTaskFromTemplateDefinition;
+    createTaskFromTemplate(templateName: string, variables: Record<string, string>, parentId?: string): Promise<string | undefined>;
+    generateDiffForChange(filePath: string, changeDescription: string, selection?: {
+        startLine: number;
+        endLine: number;
+    }): Promise<string>;
     isInitialized(): boolean;
     setTasksFilePath(filePath: string): void;
     private normalizePath;
     generateImplementationSteps(taskId: string): Promise<string>;
     expandTask(taskId: string, expansionPrompt?: string): Promise<string>;
     suggestTaskImprovements(taskId: string): Promise<string>;
-    mcpInitializeTasks(projectName: string, projectDescription: string, filePath: string): Promise<string>;
+    mcpInitializeTasks(projectName: string, projectDescription: string, absoluteFilePath: string): Promise<string>;
     mcpCreateTask(title: string, description: string, additionalContext?: string): Promise<string>;
     getTaskDependencyTree(taskId: string): {
         task: Task;

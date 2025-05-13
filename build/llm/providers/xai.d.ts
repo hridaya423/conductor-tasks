@@ -1,5 +1,5 @@
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult } from '../types.js';
 export declare class XAIProvider implements LLMProvider {
     private config;
     constructor(config: LLMProviderConfig);
@@ -11,7 +11,7 @@ export declare class XaiClient implements LLMClient {
     private client;
     private model;
     constructor(model?: string);
-    complete(options: LLMCompletionOptions): Promise<string>;
+    complete(options: LLMCompletionOptions): Promise<LLMCompletionResult>;
     getProviderName(): string;
     getModelName(): string;
 }

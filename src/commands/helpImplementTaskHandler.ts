@@ -4,7 +4,7 @@ import { ContextManager } from "../core/contextManager.js";
 import { LLMManager } from "../llm/llmManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { TaskStatus } from "../core/types.js";
+import { TaskStatus, ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const HelpImplementTaskSchema = {
   taskId: z.string().describe("ID of the task"),
@@ -16,9 +16,9 @@ export async function helpImplementTaskHandler(
   llmManager: LLMManager,
   contextManager: ContextManager,
   params: z.infer<z.ZodObject<typeof HelpImplementTaskSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
-  const notInitialized = checkTaskManagerInitialized(taskManager);
-  if (notInitialized) return notInitialized;
+): Promise<ToolResultWithNextSteps> {
+  const notInitializedResult = checkTaskManagerInitialized(taskManager);
+  if (notInitializedResult) return notInitializedResult;
 
   try {
     const { taskId, additionalContext } = params;
@@ -33,7 +33,8 @@ export async function helpImplementTaskHandler(
             type: "text",
             text: `Error: Task with ID ${taskId} not found.`
           }
-        ]
+        ],
+        isError: true
       };
     }
 
@@ -98,7 +99,10 @@ Based *only* on the information provided above, provide concrete and actionable 
 *   If the provided information is insufficient to give meaningful help, state that clearly and suggest what additional information is needed.
 `;
 
-    const result = await llmManager.sendRequest({ prompt: implementationPrompt });
+    const result = await llmManager.sendRequest({ 
+      prompt: implementationPrompt,
+      taskName: "help-implement-task"
+    });
 
     taskManager.addTaskNote(
       taskId,
@@ -114,13 +118,30 @@ Based *only* on the information provided above, provide concrete and actionable 
 
     logger.info(`Successfully provided implementation assistance for task: ${taskId}`);
 
+    const resultText = `# Implementation Assistance for "${task.title}"\n\n${result.text}\n\n_This implementation guidance has been saved as a solution note on the task. The task status has been updated to "in_progress" if it was previously "todo" or "backlog"._`;
+    const suggested_actions: SuggestedAction[] = [
+        {
+            tool_name: "get-task",
+            parameters: { id: taskId },
+            reason: "Review the task and the new implementation assistance note.",
+            user_facing_suggestion: `View task '${task.title}' with new assistance?`
+        },
+        {
+            tool_name: "add-task-note",
+            parameters: { taskId: taskId, content: "Followed AI assistance: ", author: "User", type: "progress" },
+            reason: "Log progress after applying the AI's implementation help.",
+            user_facing_suggestion: `Add a progress note to '${task.title}'?`
+        }
+    ];
+
     return {
       content: [
         {
           type: "text",
-          text: `# Implementation Assistance for "${task.title}"\n\n${result.text}\n\n_This implementation guidance has been saved as a solution note on the task. The task status has been updated to "in_progress" if it was previously "todo" or "backlog"._`
+          text: resultText
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error providing implementation assistance:', { error, taskId: params.taskId });
@@ -130,7 +151,8 @@ Based *only* on the information provided above, provide concrete and actionable 
           type: "text",
           text: `Error providing implementation assistance for ${params.taskId}: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

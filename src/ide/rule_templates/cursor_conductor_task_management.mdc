@@ -1,0 +1,48 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Best practices for effective task management with Conductor Tasks in an AI-assisted workflow
+globs: **/*
+alwaysApply: true
+---
+
+# Conductor Task Management: Best Practices
+
+Complementing the main [Conductor Tasks AI Development Workflow](mdc:conductor_tasks_workflow.mdc), these are best practices for managing tasks effectively:
+
+1.  **Task Granularity and Clarity**:
+    *   Strive for tasks (and especially sub-tasks) that are well-defined, actionable, and have clear, verifiable outcomes.
+    *   If a task received via \`get-next-task\` or \`get-task\` is too vague or overly broad, use \`expand-task\` to break it down, or use \`ask_followup_question\` to seek clarification from the user before extensive work.
+
+2.  **Effective Use of Task Attributes**:
+    *   **Priorities**: Understand that \`get-next-task\` likely uses priority. If you create tasks, assign appropriate priorities ("high", "medium", "low").
+    *   **Dependencies**: Correctly identify and manage dependencies. A task should only be started if its dependencies are 'completed'. If you identify a missing dependency for an existing task, note it or suggest an update.
+    *   **Status**: Update status promptly and accurately (e.g., "in progress" when you start, "blocked" if you hit a roadblock, "review" if it needs human checking, "completed" when done).
+
+3.  **Comprehensive Note-Taking (\`add-task-note\`)**:
+    *   This cannot be overemphasized. Your notes are the "paper trail" of your work.
+    *   Include:
+        *   Your understanding of the task.
+        *   The plan you formulated.
+        *   Specific files you read, wrote, or modified (mentioning tool usage like \`read_file\`, \`apply_diff\`).
+        *   Commands executed via \`execute_command\` and their relevant output/results.
+        *   Any errors encountered and how you resolved them.
+        *   Questions you asked and answers received.
+        *   Assumptions made.
+    *   Good notes help human collaborators, your future self (in longer sessions), and improve overall project transparency.
+
+4.  **Iterative Refinement**:
+    *   Don't assume the initial task description or breakdown is perfect.
+    *   As you implement, you may uncover new requirements or realize a different approach is better. Document these insights using \`add-task-note\` and, if necessary, suggest creating new tasks or updating existing ones.
+
+5.  **Linking to Code**:
+    *   When documenting work in task notes, referencing specific task IDs in commit messages (if you guide the user on commits) or PR descriptions can greatly improve traceability between the task management system and the codebase. Example: "Fix: Resolve issue in login flow (TASK-123)".
+
+6.  **Proactive Problem Identification**:
+    *   If you foresee issues, such as a task missing critical information, a dependency conflict, or a potentially flawed plan, raise these concerns early using \`add-task-note\` and potentially \`ask_followup_question\`.
+
+By following these practices, you can leverage Conductor Tasks more effectively as an AI assistant, leading to smoother development cycles and better project outcomes.
+

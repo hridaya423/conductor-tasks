@@ -1,4 +1,5 @@
 import { ContextPriority } from './types.js';
+import logger from './logger.js';
 export class ContextManager {
     constructor() {
         this.contextItems = new Map();
@@ -76,6 +77,13 @@ export class ContextManager {
             }
         }
         this.contextItems = contextToKeep;
+    }
+    setIDERulesManager(ideRulesManager) {
+        this.ideRulesManager = ideRulesManager;
+        logger.debug('IDE Rules Manager set in context');
+    }
+    getIDERulesManager() {
+        return this.ideRulesManager;
     }
 }
 //# sourceMappingURL=contextManager.js.map

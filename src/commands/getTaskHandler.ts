@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { Task } from "../core/types.js";
+import { Task, ToolResultWithNextSteps, SuggestedAction, TaskStatus } from "../core/types.js";
 
 export const GetTaskSchema = {
   id: z.string().describe("ID of the task to retrieve")
@@ -11,9 +11,9 @@ export const GetTaskSchema = {
 export async function getTaskHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof GetTaskSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
-  const notInitialized = checkTaskManagerInitialized(taskManager);
-  if (notInitialized) return notInitialized;
+): Promise<ToolResultWithNextSteps> {
+  const notInitializedResult = checkTaskManagerInitialized(taskManager);
+  if (notInitializedResult) return notInitializedResult;
 
   try {
     const { id } = params;
@@ -28,7 +28,8 @@ export async function getTaskHandler(
             type: "text",
             text: `Task with ID ${id} not found`
           }
-        ]
+        ],
+        isError: true
       };
     }
 
@@ -65,13 +66,38 @@ export async function getTaskHandler(
                         subtasksText +
                         notesFormatted;
 
+    const suggested_actions: SuggestedAction[] = [
+      {
+        tool_name: "update-task",
+        parameters: { id: task.id, status: task.status  },
+        reason: "Update the task's status, priority, or other details.",
+        user_facing_suggestion: `Update task '${task.title}'?`
+      },
+      {
+        tool_name: "add-task-note",
+        parameters: { taskId: task.id, content: "", author: "User", type: "comment" },
+        reason: "Add a note to this task.",
+        user_facing_suggestion: `Add a note to '${task.title}'?`
+      }
+    ];
+    if (task.status !== TaskStatus.DONE) {
+        suggested_actions.push({
+            tool_name: "generate-steps",
+            parameters: { taskId: task.id },
+            reason: "Generate or refresh the implementation plan for this task.",
+            user_facing_suggestion: `Generate implementation steps for '${task.title}'?`
+        });
+    }
+
+
     return {
       content: [
         {
           type: "text",
           text: textResponse
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error retrieving task:', { error, taskId: params.id });
@@ -81,7 +107,8 @@ export async function getTaskHandler(
           type: "text",
           text: `Error retrieving task ${params.id}: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

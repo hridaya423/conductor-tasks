@@ -1,4 +1,4 @@
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult, LLMUsage } from '../types.js';
 import OpenAI from 'openai';
 import process from 'process';
 import { ErrorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../../core/errorHandler.js';
@@ -9,26 +9,40 @@ export class OpenAIClient implements LLMClient {
   private client: OpenAI;
   private model: string;
   private maxRetries: number = 3;
+  private apiKey?: string;
+  private baseURL?: string;
 
-  constructor(model?: string) {
-    const apiKey = process.env.OPENAI_API_KEY;
+  constructor(model?: string, apiKey?: string, baseURL?: string) {
+    this.apiKey = apiKey || process.env.OPENAI_API_KEY;
+    this.baseURL = baseURL;
 
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is required for OpenAI client');
+    if (!this.apiKey) {
+      
+      
+      
+      throw new Error('API key is required for OpenAI client (either passed or via OPENAI_API_KEY env var)');
     }
 
-    this.client = new OpenAI({
-      apiKey: apiKey
-    });
+    
+    
+    const optionsForOpenAI: { apiKey: string; baseURL?: string } = {
+      apiKey: this.apiKey,
+    };
 
-    this.model = model || process.env.MODEL || 'gpt-4o';
+    if (this.baseURL) {
+      optionsForOpenAI.baseURL = this.baseURL;
+    }
+
+    this.client = new OpenAI(optionsForOpenAI);
+
+    this.model = model || process.env.MODEL || 'gpt-4o'; 
     
     if (process.env.LLM_MAX_RETRIES) {
       this.maxRetries = parseInt(process.env.LLM_MAX_RETRIES, 10);
     }
   }
 
-  async complete(options: LLMCompletionOptions): Promise<string> {
+  async complete(options: LLMCompletionOptions): Promise<LLMCompletionResult> {
     const {
       prompt,
       maxTokens = 4000,
@@ -85,22 +99,49 @@ export class OpenAIClient implements LLMClient {
           });
 
           let fullResponse = '';
+          
+          
+          
+          let finishReason: string | null = null;
+
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
               fullResponse += content;
               onStreamUpdate(content);
             }
+            if (chunk.choices[0]?.finish_reason) {
+              finishReason = chunk.choices[0].finish_reason;
+            }
           }
 
-          return fullResponse;
+          return {
+            text: fullResponse,
+            usage: null, 
+            model: this.model, 
+            finishReason: finishReason || undefined,
+          };
         } else {
           const response = await this.client.chat.completions.create({
             ...params,
             stream: false,
           });
 
-          return response.choices[0]?.message?.content || '';
+          const text = response.choices[0]?.message?.content || '';
+          const usage: LLMUsage | null = response.usage
+            ? {
+                promptTokens: response.usage.prompt_tokens,
+                completionTokens: response.usage.completion_tokens,
+                totalTokens: response.usage.total_tokens,
+              }
+            : null;
+          
+          return {
+            text: text,
+            usage: usage,
+            model: response.model,
+            finishReason: response.choices[0]?.finish_reason || undefined,
+          };
         }
       } catch (error) {
         lastError = error;

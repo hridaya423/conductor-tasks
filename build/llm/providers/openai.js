@@ -3,15 +3,20 @@ import process from 'process';
 import { ErrorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../../core/errorHandler.js';
 const errorHandler = ErrorHandler.getInstance();
 export class OpenAIClient {
-    constructor(model) {
+    constructor(model, apiKey, baseURL) {
         this.maxRetries = 3;
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-            throw new Error('OPENAI_API_KEY environment variable is required for OpenAI client');
+        this.apiKey = apiKey || process.env.OPENAI_API_KEY;
+        this.baseURL = baseURL;
+        if (!this.apiKey) {
+            throw new Error('API key is required for OpenAI client (either passed or via OPENAI_API_KEY env var)');
         }
-        this.client = new OpenAI({
-            apiKey: apiKey
-        });
+        const optionsForOpenAI = {
+            apiKey: this.apiKey,
+        };
+        if (this.baseURL) {
+            optionsForOpenAI.baseURL = this.baseURL;
+        }
+        this.client = new OpenAI(optionsForOpenAI);
         this.model = model || process.env.MODEL || 'gpt-4o';
         if (process.env.LLM_MAX_RETRIES) {
             this.maxRetries = parseInt(process.env.LLM_MAX_RETRIES, 10);
@@ -49,21 +54,43 @@ export class OpenAIClient {
                         stream: true,
                     });
                     let fullResponse = '';
+                    let finishReason = null;
                     for await (const chunk of stream) {
                         const content = chunk.choices[0]?.delta?.content || '';
                         if (content) {
                             fullResponse += content;
                             onStreamUpdate(content);
                         }
+                        if (chunk.choices[0]?.finish_reason) {
+                            finishReason = chunk.choices[0].finish_reason;
+                        }
                     }
-                    return fullResponse;
+                    return {
+                        text: fullResponse,
+                        usage: null,
+                        model: this.model,
+                        finishReason: finishReason || undefined,
+                    };
                 }
                 else {
                     const response = await this.client.chat.completions.create({
                         ...params,
                         stream: false,
                     });
-                    return response.choices[0]?.message?.content || '';
+                    const text = response.choices[0]?.message?.content || '';
+                    const usage = response.usage
+                        ? {
+                            promptTokens: response.usage.prompt_tokens,
+                            completionTokens: response.usage.completion_tokens,
+                            totalTokens: response.usage.total_tokens,
+                        }
+                        : null;
+                    return {
+                        text: text,
+                        usage: usage,
+                        model: response.model,
+                        finishReason: response.choices[0]?.finish_reason || undefined,
+                    };
                 }
             }
             catch (error) {

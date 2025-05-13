@@ -3,7 +3,7 @@ import * as path from 'path';
 import { TaskManager } from "../task/taskManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { Task, TaskPriority } from "../core/types.js";
+import { Task, TaskPriority, ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const ParsePrdSchema = {
   prdContent: z.string().describe("Content of the PRD to parse"),
@@ -13,7 +13,7 @@ export const ParsePrdSchema = {
 export async function parsePrdHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof ParsePrdSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
+): Promise<ToolResultWithNextSteps> {
   try {
     const { prdContent, createTasksFile } = params;
     logger.info(`Parsing PRD content (length: ${prdContent.length}), createTasksFile: ${createTasksFile}`);
@@ -21,17 +21,17 @@ export async function parsePrdHandler(
     
     console.log(`\n===== PRD CONTENT SAMPLE =====\n${prdContent.substring(0, 200)}...\n===== END PRD SAMPLE =====\n`);
 
-    const notInitialized = checkTaskManagerInitialized(taskManager);
-    if (notInitialized && createTasksFile) {
-      
-      const workspaceRoot = (taskManager as any).workspaceRoot || process.cwd();
+    let notInitializedResult = checkTaskManagerInitialized(taskManager);
+    if (notInitializedResult && createTasksFile) {
+      const workspaceRoot = (taskManager as any).workspaceRoot || process.cwd(); 
       const defaultPath = path.resolve(path.join(workspaceRoot, 'TASKS.md'));
       
       logger.info(`Initializing task system at absolute path: ${defaultPath}`);
       await taskManager.initialize("PRD Project", "Project initialized from PRD parsing", defaultPath);
       logger.info("Task system automatically initialized for PRD parsing");
-    } else if (notInitialized) {
-      return notInitialized;
+      notInitializedResult = null; 
+    } else if (notInitializedResult) {
+      return notInitializedResult;
     }
 
     logger.info(`Sending PRD content to LLM for parsing...`);
@@ -46,7 +46,8 @@ export async function parsePrdHandler(
             type: "text",
             text: "No tasks could be extracted from the PRD. The document might be too short or not contain any clear requirements."
           }
-        ]
+        ],
+        isError: true 
       };
     }
 
@@ -83,13 +84,30 @@ export async function parsePrdHandler(
       logger.info(`Tasks saved to ${tasksFilePath}`);
     }
 
+    const suggested_actions: SuggestedAction[] = [
+        {
+            tool_name: "list-tasks",
+            reason: "View all newly created tasks from the PRD content.",
+            user_facing_suggestion: "List all tasks created from the PRD content?"
+        }
+    ];
+    if (taskIds.length > 0) {
+        suggested_actions.push({
+            tool_name: "get-task",
+            parameters: { id: taskIds[0] },
+            reason: "View details of the first task created.",
+            user_facing_suggestion: `View details of the first task ('${tasks[0]?.title || taskIds[0]}')?`
+        });
+    }
+
     return {
       content: [
         {
           type: "text",
           text: taskListText
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error parsing PRD content:', { error });
@@ -99,7 +117,8 @@ export async function parsePrdHandler(
           type: "text",
           text: `Error parsing PRD: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

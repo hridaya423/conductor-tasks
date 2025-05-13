@@ -84,25 +84,38 @@ export class OllamaClient {
                 const buffer = [];
                 const stream = Readable.fromWeb(response.body);
                 const decoder = new TextDecoder();
-                let fullResponse = '';
+                let fullResponseText = '';
+                let usage = null;
                 for await (const chunk of stream) {
-                    buffer.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-                    const textChunk = decoder.decode(chunk, { stream: true });
-                    const lines = textChunk.split('\n').filter(Boolean);
+                    const lines = decoder.decode(chunk, { stream: true }).split('\n').filter(Boolean);
                     for (const line of lines) {
                         try {
                             const data = JSON.parse(line);
                             if (data.response) {
-                                fullResponse += data.response;
+                                fullResponseText += data.response;
                                 onStreamUpdate(data.response);
+                            }
+                            if (data.done === true) {
+                                if (typeof data.prompt_eval_count === 'number' && typeof data.eval_count === 'number') {
+                                    usage = {
+                                        promptTokens: data.prompt_eval_count,
+                                        completionTokens: data.eval_count,
+                                        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+                                    };
+                                }
                             }
                         }
                         catch (e) {
-                            console.warn('Error parsing Ollama stream chunk:', e);
+                            console.warn('Error parsing Ollama stream chunk:', line, e);
                         }
                     }
                 }
-                return fullResponse;
+                return {
+                    text: fullResponseText,
+                    usage: usage,
+                    model: this.model,
+                    finishReason: undefined,
+                };
             }
             else {
                 const response = await fetch(`${this.baseUrl}/api/generate`, {
@@ -116,18 +129,33 @@ export class OllamaClient {
                         system: systemPrompt || '',
                         temperature: temperature,
                         max_tokens: maxTokens,
+                        stream: false,
                     }),
                 });
                 if (!response.ok) {
-                    throw new Error(`Ollama API error: ${response.statusText}`);
+                    const errorBody = await response.text();
+                    throw new Error(`Ollama API error: ${response.statusText} - ${errorBody}`);
                 }
                 const data = await response.json();
-                return data.response || '';
+                const text = data.response || '';
+                const usage = (typeof data.prompt_eval_count === 'number' && typeof data.eval_count === 'number')
+                    ? {
+                        promptTokens: data.prompt_eval_count,
+                        completionTokens: data.eval_count,
+                        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+                    }
+                    : null;
+                return {
+                    text: text,
+                    usage: usage,
+                    model: this.model,
+                    finishReason: undefined,
+                };
             }
         }
         catch (error) {
             console.error('Ollama API error:', error);
-            return `Error: ${error}`;
+            throw new Error(`Ollama API error: ${error.message || String(error)}`);
         }
     }
     getProviderName() {

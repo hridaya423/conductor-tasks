@@ -1,6 +1,6 @@
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
 import Groq from 'groq-sdk';
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult, LLMUsage } from '../types.js';
 import process from 'process';
 
 export class GroqProvider implements LLMProvider {
@@ -75,10 +75,11 @@ export class GroqClient implements LLMClient {
       apiKey: apiKey
     });
 
-    this.model = model || process.env.MODEL || 'llama3-70b-8192';
+    
+    this.model = process.env.GROQ_MODEL || model || 'deepseek-r1-distill-llama-70b'; 
   }
 
-  async complete(options: LLMCompletionOptions): Promise<string> {
+  async complete(options: LLMCompletionOptions): Promise<LLMCompletionResult> {
     const {
       prompt,
       maxTokens = 4000,
@@ -109,29 +110,67 @@ export class GroqClient implements LLMClient {
         });
 
         let fullResponse = '';
+        let finishReason: string | undefined = undefined;
+        let usage: LLMUsage | null = null; 
+        
+
         for await (const chunk of response) {
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
             fullResponse += content;
             onStreamUpdate(content);
           }
+          if (chunk.choices[0]?.finish_reason) {
+            finishReason = chunk.choices[0].finish_reason;
+          }
+          
+          
+          if (chunk.x_groq?.usage) {
+             usage = {
+                promptTokens: chunk.x_groq.usage.prompt_tokens || 0,
+                completionTokens: chunk.x_groq.usage.completion_tokens || 0,
+                totalTokens: chunk.x_groq.usage.total_tokens || 0,
+             };
+          }
         }
+        
+        return {
+          text: fullResponse,
+          usage: usage, 
+          model: this.model, 
+          finishReason: finishReason,
+        };
 
-        return fullResponse;
       } else {
         const response = await this.client.chat.completions.create({
           model: this.model,
           messages: messages,
           max_tokens: maxTokens,
           temperature: temperature,
-          top_p: topP
+          top_p: topP,
         });
 
-        return response.choices[0]?.message?.content || '';
+        const text = response.choices[0]?.message?.content || '';
+        const responseUsage = response.usage;
+        const usage: LLMUsage | null = responseUsage
+          ? {
+              promptTokens: responseUsage.prompt_tokens,
+              completionTokens: responseUsage.completion_tokens,
+              totalTokens: responseUsage.total_tokens,
+            }
+          : null;
+
+        return {
+          text: text,
+          usage: usage,
+          model: response.model || this.model,
+          finishReason: response.choices[0]?.finish_reason || undefined,
+        };
       }
-    } catch (error) {
+    } catch (error: any) { 
       console.error('Groq API error:', error);
-      return `Error: ${error}`;
+      
+      throw new Error(`Groq API error: ${error.message || String(error)}`);
     }
   }
 

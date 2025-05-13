@@ -8,9 +8,9 @@ export const AddTaskNoteSchema = {
     type: z.enum(["progress", "comment", "blocker", "solution"]).describe("Type of note")
 };
 export async function addTaskNoteHandler(taskManager, params) {
-    const notInitialized = checkTaskManagerInitialized(taskManager);
-    if (notInitialized)
-        return notInitialized;
+    const notInitializedResult = checkTaskManagerInitialized(taskManager);
+    if (notInitializedResult)
+        return notInitializedResult;
     try {
         const { taskId, content, author, type } = params;
         logger.info(`Adding ${type} note to task ${taskId}`, { author });
@@ -23,16 +23,26 @@ export async function addTaskNoteHandler(taskManager, params) {
                         type: "text",
                         text: `Error: Task with ID ${taskId} not found.`
                     }
-                ]
+                ],
+                isError: true
             };
         }
+        const suggested_actions = [
+            {
+                tool_name: "get-task",
+                parameters: { id: taskId },
+                reason: "View the task to see the newly added note.",
+                user_facing_suggestion: `View task ${taskId} to see the new note?`
+            }
+        ];
         return {
             content: [
                 {
                     type: "text",
                     text: `Note added to task ${taskId}:\n\n${content}`
                 }
-            ]
+            ],
+            suggested_actions
         };
     }
     catch (error) {
@@ -43,7 +53,8 @@ export async function addTaskNoteHandler(taskManager, params) {
                     type: "text",
                     text: `Error adding note to task ${params.taskId}: ${error.message || String(error)}`
                 }
-            ]
+            ],
+            isError: true
         };
     }
 }

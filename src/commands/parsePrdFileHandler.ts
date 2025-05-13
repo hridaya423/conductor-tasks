@@ -4,7 +4,7 @@ import * as path from 'path';
 import { TaskManager } from "../task/taskManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { Task, TaskPriority } from "../core/types.js";
+import { Task, TaskPriority, ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const ParsePrdFileSchema = {
   filePath: z.string().describe("Path to the PRD file to parse"),
@@ -15,7 +15,7 @@ export const ParsePrdFileSchema = {
 export async function parsePrdFileHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof ParsePrdFileSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
+): Promise<ToolResultWithNextSteps> {
   try {
     const { filePath, createTasksFile, verbose } = params;
     logger.info(`Parsing PRD file: ${filePath}`, { createTasksFile, verbose });
@@ -24,41 +24,29 @@ export async function parsePrdFileHandler(
     const resolvedPath = path.resolve(filePath);
     logger.info(`Using resolved PRD file path: ${resolvedPath}`);
     
-    const notInitialized = checkTaskManagerInitialized(taskManager);
-    if (notInitialized && createTasksFile) {
-      let workspaceRoot;
+    let notInitializedResult = checkTaskManagerInitialized(taskManager);
+    if (notInitializedResult && createTasksFile) {
       
+      let workspaceRoot;
       if (process.env.WORKSPACE_FOLDER_PATHS) {
         const paths = process.env.WORKSPACE_FOLDER_PATHS.split(';');
-        if (paths.length > 0 && paths[0]) {
-          workspaceRoot = paths[0];
-          logger.info(`Using workspace path from WORKSPACE_FOLDER_PATHS: ${workspaceRoot}`);
-        }
+        if (paths.length > 0 && paths[0]) workspaceRoot = paths[0];
       }
-
-      if (!workspaceRoot) {
-        workspaceRoot = path.dirname(resolvedPath);
-        logger.info(`No workspace path found, using PRD file directory: ${workspaceRoot}`);
-      }
+      if (!workspaceRoot) workspaceRoot = path.dirname(resolvedPath);
       
       const tasksFilePath = path.join(workspaceRoot, 'TASKS.md');
-      logger.info(`Initializing task system at ${tasksFilePath}`);
-      
       await taskManager.initialize("PRD Project", "Project initialized from PRD parsing", tasksFilePath);
       logger.info("Task system automatically initialized for PRD file parsing");
-    } else if (notInitialized) {
-      return notInitialized;
+      notInitializedResult = null; 
+    } else if (notInitializedResult) {
+      return notInitializedResult; 
     }
     
     if (!fs.existsSync(resolvedPath)) {
       logger.error(`PRD file not found: ${resolvedPath}`);
       return {
-        content: [
-          {
-            type: "text",
-            text: `Error: File not found at ${resolvedPath}`
-          }
-        ]
+        content: [ { type: "text", text: `Error: File not found at ${resolvedPath}` } ],
+        isError: true
       };
     }
 
@@ -76,7 +64,8 @@ export async function parsePrdFileHandler(
             type: "text",
             text: "No tasks could be extracted from the PRD file. The document might be too short or not contain any clear requirements."
           }
-        ]
+        ],
+        isError: true 
       };
     }
 
@@ -123,13 +112,30 @@ export async function parsePrdFileHandler(
       logger.info(`Tasks saved to ${tasksFilePath}`);
     }
 
+    const suggested_actions: SuggestedAction[] = [
+        {
+            tool_name: "list-tasks",
+            reason: "View all newly created tasks from the PRD.",
+            user_facing_suggestion: "List all tasks created from the PRD?"
+        }
+    ];
+    if (taskIds.length > 0) {
+        suggested_actions.push({
+            tool_name: "get-task",
+            parameters: { id: taskIds[0] },
+            reason: "View details of the first task created.",
+            user_facing_suggestion: `View details of the first task ('${tasks[0]?.title || taskIds[0]}')?`
+        });
+    }
+
     return {
       content: [
         {
           type: "text",
           text: taskListText
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error parsing PRD file:', { error, filePath: params.filePath });
@@ -139,7 +145,8 @@ export async function parsePrdFileHandler(
           type: "text",
           text: `Error parsing PRD file ${params.filePath}: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }

@@ -1,0 +1,41 @@
+# Roo Code (Test Mode): AI Testing Strategies & Execution with Conductor Tasks
+
+- **Test Planning & Design**:
+    - For a given feature task (\`get-task --id <id>\`), help the user outline comprehensive test scenarios. Consider:
+        - Positive test cases (happy paths).
+        - Negative test cases (error conditions, invalid inputs).
+        - Edge cases.
+        - Performance considerations (if applicable).
+    - These scenarios can be added as sub-tasks to the main feature task using \`expand-task\` or as detailed checklist items in an \`add-task-note\`.
+- **Writing & Modifying Test Code**:
+    - **Examine Existing Tests**: Before writing new tests, use \`read_file\` on existing test files (e.g., in \`src/test/\`, \`tests/\`) to understand:
+        - Testing frameworks used (JUnit, Mockito, Jest, PyTest, etc.).
+        - Common assertion patterns.
+        - Setup/teardown procedures.
+        - Mocking strategies.
+    - **Create New Test Files**: Use \`write_to_file\` to create new test files, following established naming conventions (e.g., \`MyClass.test.js\`, \`TestMyClass.java\`).
+    - **Add Test Cases**: Use \`apply_diff\` to add new test methods/functions to existing test files. Ensure your new tests are clearly named and target specific functionality.
+- **Executing Tests**:
+    - Use \`execute_command\` to run test suites. Examples:
+        - \`npm test\`
+        - \`mvn test\`
+        - \`gradle test\`
+        - \`pytest\`
+        - \`go test ./...\`
+    - If specific test files or test cases can be run, use the appropriate command: \`execute_command "npm test src/utils.test.js"\`.
+- **Analyzing Test Results**:
+    - Meticulously examine the output from \`execute_command\` after running tests.
+    - **Identify Failures**: Note which tests failed and the reasons/error messages provided.
+    - **Debug Failures**:
+        1.  Use \`read_file\` to examine the failing test code itself.
+        2.  Use \`read_file\` to examine the application code being tested by the failing test.
+        3.  Switch to a "debug" mindset (refer to \`debugging-conductor.rules\`). Help diagnose whether the issue is in the test or the application code.
+        4.  Propose fixes using \`apply_diff\` for either the test or the application code.
+- **Test Coverage (Conceptual)**:
+    - While you cannot directly measure code coverage, you can help improve it by:
+        - Reviewing the requirements of a feature task and ensuring there's at least one test case for each requirement.
+        - Suggesting tests for different branches of conditional logic within the code you're working on (\`read_file\` the code to identify branches).
+- **Task Updates Based on Testing**:
+    - Update the status of the feature task or bug-fix task based on test outcomes.
+    - If all tests pass for a feature, it might move to a 'review' or 'completed' status (\`update-task\`).
+    - If tests fail, the task might remain 'in progress' or move to 'blocked' if the fix is non-trivial. Document findings with \`add-task-note\`.

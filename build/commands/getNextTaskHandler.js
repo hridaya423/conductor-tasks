@@ -3,21 +3,36 @@ import logger from "../core/logger.js";
 import { TaskStatus } from "../core/types.js";
 export const GetNextTaskSchema = {};
 export async function getNextTaskHandler(taskManager, params) {
-    const notInitialized = checkTaskManagerInitialized(taskManager);
-    if (notInitialized)
-        return notInitialized;
+    const notInitializedResult = checkTaskManagerInitialized(taskManager);
+    if (notInitializedResult)
+        return notInitializedResult;
     try {
         logger.info('Getting next task');
         const nextTask = taskManager.getNextTask();
         if (!nextTask) {
             logger.info('No next task available');
+            const suggested_actions = [
+                {
+                    tool_name: "create-task",
+                    parameters: { title: "New Task", description: "Details for the new task." },
+                    reason: "No tasks are available, create one to get started.",
+                    user_facing_suggestion: "No tasks available. Create a new task?"
+                },
+                {
+                    tool_name: "list-tasks",
+                    parameters: { status: "backlog" },
+                    reason: "Check if there are tasks in the backlog that can be moved to 'todo'.",
+                    user_facing_suggestion: "View backlog tasks?"
+                }
+            ];
             return {
                 content: [
                     {
                         type: "text",
-                        text: "No tasks available. Create a new task first or check your filters."
+                        text: "No next task available. Consider creating a new task or reviewing your backlog."
                     }
-                ]
+                ],
+                suggested_actions
             };
         }
         logger.info(`Next task found: ${nextTask.id} - ${nextTask.title}`);
@@ -50,13 +65,28 @@ export async function getNextTaskHandler(taskManager, params) {
             notesFormatted +
             `\n\n## What to do?\n\nTo start working on this task, change its status to "in_progress":\n` +
             `update-task --id ${nextTask.id} --status in_progress`;
+        const suggested_actions = [
+            {
+                tool_name: "update-task",
+                parameters: { id: nextTask.id, status: "in_progress" },
+                reason: "Start working on this task by marking it as 'in_progress'.",
+                user_facing_suggestion: `Start working on '${nextTask.title}'?`
+            },
+            {
+                tool_name: "generate-steps",
+                parameters: { taskId: nextTask.id },
+                reason: "Generate an implementation plan for this task.",
+                user_facing_suggestion: `Generate implementation plan for '${nextTask.title}'?`
+            }
+        ];
         return {
             content: [
                 {
                     type: "text",
                     text: textResponse
                 }
-            ]
+            ],
+            suggested_actions
         };
     }
     catch (error) {
@@ -67,7 +97,8 @@ export async function getNextTaskHandler(taskManager, params) {
                     type: "text",
                     text: `Error getting next task: ${error.message || String(error)}`
                 }
-            ]
+            ],
+            isError: true
         };
     }
 }

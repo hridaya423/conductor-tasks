@@ -73,7 +73,7 @@ export class GeminiClient {
             throw new Error('GEMINI_API_KEY environment variable is required for Gemini client');
         }
         this.client = new GoogleGenerativeAI(apiKey);
-        this.model = model || process.env.MODEL || 'gemini-2.5-pro-latest';
+        this.model = process.env.GEMINI_MODEL || model || 'gemini-1.5-flash-latest';
         if (process.env.LLM_MAX_RETRIES) {
             this.maxRetries = parseInt(process.env.LLM_MAX_RETRIES, 10);
         }
@@ -118,33 +118,67 @@ export class GeminiClient {
                     ? `${effectiveSystemPrompt}\n\n${prompt}`
                     : prompt;
                 if (stream && onStreamUpdate) {
-                    const result = await model.generateContentStream(combinedPrompt);
-                    let fullResponse = '';
-                    for await (const chunk of result.stream) {
+                    const streamResult = await model.generateContentStream(combinedPrompt);
+                    let fullResponseText = '';
+                    let aggregatedResponse = null;
+                    for await (const chunk of streamResult.stream) {
                         const content = chunk.text();
                         if (content) {
-                            fullResponse += content;
+                            fullResponseText += content;
                             onStreamUpdate(content);
                         }
                     }
-                    if (isJsonRequest && fullResponse) {
-                        const jsonArray = JsonUtils.extractJsonArray(fullResponse, false);
+                    try {
+                        aggregatedResponse = await streamResult.response;
+                    }
+                    catch (streamError) {
+                        console.warn("Gemini stream: error awaiting aggregated response:", streamError);
+                    }
+                    if (isJsonRequest && fullResponseText) {
+                        const jsonArray = JsonUtils.extractJsonArray(fullResponseText, false);
                         if (jsonArray !== null) {
-                            fullResponse = JSON.stringify(jsonArray);
+                            fullResponseText = JSON.stringify(jsonArray);
                         }
                     }
-                    return fullResponse;
+                    const aggUsageMeta = aggregatedResponse?.usageMetadata;
+                    const usage = aggUsageMeta
+                        ? {
+                            promptTokens: aggUsageMeta.promptTokenCount ?? 0,
+                            completionTokens: aggUsageMeta.candidatesTokenCount ?? 0,
+                            totalTokens: aggUsageMeta.totalTokenCount ?? 0,
+                        }
+                        : null;
+                    return {
+                        text: fullResponseText,
+                        usage: usage,
+                        model: this.model,
+                        finishReason: aggregatedResponse?.candidates?.[0]?.finishReason || undefined,
+                    };
                 }
                 else {
                     const result = await model.generateContent(combinedPrompt);
-                    let responseText = result.response.text();
+                    const response = result.response;
+                    let responseText = response.text();
                     if (isJsonRequest && responseText) {
                         const jsonArray = JsonUtils.extractJsonArray(responseText, false);
                         if (jsonArray !== null) {
                             responseText = JSON.stringify(jsonArray);
                         }
                     }
-                    return responseText;
+                    const respUsageMeta = response?.usageMetadata;
+                    const usage = respUsageMeta
+                        ? {
+                            promptTokens: respUsageMeta.promptTokenCount ?? 0,
+                            completionTokens: respUsageMeta.candidatesTokenCount ?? 0,
+                            totalTokens: respUsageMeta.totalTokenCount ?? 0,
+                        }
+                        : null;
+                    return {
+                        text: responseText,
+                        usage: usage,
+                        model: this.model,
+                        finishReason: response.candidates?.[0]?.finishReason || undefined,
+                    };
                 }
             }
             catch (error) {

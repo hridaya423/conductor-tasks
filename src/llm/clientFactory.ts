@@ -25,9 +25,7 @@ export function getLLMClient(providerOverride?: string): LLMClient {
     case 'openai':
       client = new OpenAIClient();
       break;
-
     default:
-
       client = new AnthropicClient();
       break;
   }

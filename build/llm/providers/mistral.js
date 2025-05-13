@@ -110,14 +110,36 @@ export class MistralClient {
                     topP: topP
                 });
                 let fullResponse = '';
+                let finishReason = undefined;
+                let usage = null;
                 for await (const chunk of streamResponse) {
-                    const content = this.extractStreamContent(chunk);
-                    if (content) {
-                        fullResponse += content;
-                        onStreamUpdate(content);
+                    const choices = chunk.choices;
+                    if (choices && choices.length > 0) {
+                        const choice = choices[0];
+                        if (choice.delta && choice.delta.content) {
+                            const content = choice.delta.content;
+                            fullResponse += content;
+                            onStreamUpdate(content);
+                        }
+                        if (choice.finish_reason) {
+                            finishReason = choice.finish_reason;
+                        }
+                    }
+                    if (chunk.usage) {
+                        const chunkUsage = chunk.usage;
+                        usage = {
+                            promptTokens: chunkUsage.promptTokens || chunkUsage.prompt_tokens || 0,
+                            completionTokens: chunkUsage.completionTokens || chunkUsage.completion_tokens || 0,
+                            totalTokens: chunkUsage.totalTokens || chunkUsage.total_tokens || 0,
+                        };
                     }
                 }
-                return fullResponse;
+                return {
+                    text: fullResponse,
+                    usage: usage,
+                    model: this.model,
+                    finishReason: finishReason,
+                };
             }
             else {
                 const response = await this.client.chat.complete({
@@ -125,35 +147,28 @@ export class MistralClient {
                     messages: messages,
                     temperature: temperature,
                     maxTokens: maxTokens,
-                    topP: topP
+                    topP: topP,
                 });
-                return String(response.choices?.[0]?.message.content || 'No response from Mistral API');
+                const text = String(response.choices?.[0]?.message.content || 'No response from Mistral API');
+                const responseUsage = response.usage;
+                const usage = responseUsage
+                    ? {
+                        promptTokens: responseUsage.promptTokens,
+                        completionTokens: responseUsage.completionTokens,
+                        totalTokens: responseUsage.totalTokens,
+                    }
+                    : null;
+                return {
+                    text: text,
+                    usage: usage,
+                    model: response.model || this.model,
+                    finishReason: response.choices && response.choices.length > 0 ? response.choices[0].finishReason : undefined,
+                };
             }
         }
         catch (error) {
             console.error('Mistral API error:', error);
-            return `Error: ${error}`;
-        }
-    }
-    extractStreamContent(chunk) {
-        try {
-            if (chunk.choices && chunk.choices[0]?.delta?.content) {
-                return chunk.choices[0].delta.content;
-            }
-            if (chunk.delta && (typeof chunk.delta.text === 'string')) {
-                return chunk.delta.text;
-            }
-            if (chunk.content) {
-                return chunk.content;
-            }
-            if (chunk.message && chunk.message.content) {
-                return chunk.message.content;
-            }
-            return '';
-        }
-        catch (e) {
-            console.warn('Error extracting content from Mistral stream chunk:', e);
-            return '';
+            throw new Error(`Mistral API error: ${error.message || String(error)}`);
         }
     }
     getProviderName() {

@@ -1,7 +1,7 @@
 import { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from '../../core/types.js';
-import { LLMClient, LLMCompletionOptions } from '../types.js';
+import { LLMClient, LLMCompletionOptions, LLMCompletionResult, LLMUsage } from '../types.js';
 import process from 'process';
-import fetch from 'node-fetch';
+
 import { OpenAI } from 'openai';
 
 export class PerplexityProvider implements LLMProvider {
@@ -84,7 +84,7 @@ export class PerplexityClient implements LLMClient {
     this.model = model || process.env.PERPLEXITY_MODEL || 'llama-3-sonar-medium-32k-online';
   }
 
-  async complete(options: LLMCompletionOptions): Promise<string> {
+  async complete(options: LLMCompletionOptions): Promise<LLMCompletionResult> {
     const {
       prompt,
       systemPrompt,
@@ -119,28 +119,52 @@ export class PerplexityClient implements LLMClient {
         });
 
         let fullResponse = '';
+        let finishReason: string | undefined = undefined;
+
         for await (const chunk of response) {
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
             fullResponse += content;
             onStreamUpdate(content);
           }
+          if (chunk.choices[0]?.finish_reason) {
+            finishReason = chunk.choices[0].finish_reason;
+          }
         }
 
-        return fullResponse;
+        return {
+          text: fullResponse,
+          usage: null, 
+          model: this.model,
+          finishReason: finishReason,
+        };
       } else {
         const response = await this.client.chat.completions.create({
           model: this.model,
           messages,
           temperature,
-          max_tokens: maxTokens
+          max_tokens: maxTokens,
         });
 
-        return response.choices[0].message.content || '';
+        const text = response.choices[0]?.message?.content || '';
+        const usage: LLMUsage | null = response.usage
+          ? {
+              promptTokens: response.usage.prompt_tokens,
+              completionTokens: response.usage.completion_tokens,
+              totalTokens: response.usage.total_tokens,
+            }
+          : null;
+
+        return {
+          text: text,
+          usage: usage,
+          model: response.model || this.model,
+          finishReason: response.choices[0]?.finish_reason || undefined,
+        };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Perplexity API error:', error);
-      return `Error: ${error}`;
+      throw new Error(`Perplexity API error: ${error.message || String(error)}`);
     }
   }
 
@@ -151,4 +175,4 @@ export class PerplexityClient implements LLMClient {
   getModelName(): string {
     return this.model;
   }
-} 
+}

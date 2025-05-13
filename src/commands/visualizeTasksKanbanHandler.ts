@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TaskManager } from "../task/taskManager.js";
 import { checkTaskManagerInitialized } from "../core/checkInit.js";
 import logger from "../core/logger.js";
-import { TaskPriority, TaskStatus, Task } from "../core/types.js";
+import { TaskPriority, TaskStatus, Task, ToolResultWithNextSteps, SuggestedAction } from "../core/types.js";
 
 export const VisualizeTasksKanbanSchema = {
   priority: z.enum(["critical", "high", "medium", "low", "backlog"]).optional().describe("Filter by priority level"),
@@ -15,9 +15,9 @@ export const VisualizeTasksKanbanSchema = {
 export async function visualizeTasksKanbanHandler(
   taskManager: TaskManager,
   params: z.infer<z.ZodObject<typeof VisualizeTasksKanbanSchema>>
-): Promise<{ content: { type: "text"; text: string }[] }> {
-  const notInitialized = checkTaskManagerInitialized(taskManager);
-  if (notInitialized) return notInitialized;
+): Promise<ToolResultWithNextSteps> {
+  const notInitializedResult = checkTaskManagerInitialized(taskManager);
+  if (notInitializedResult) return notInitializedResult;
 
   try {
     const { priority, tag, compact, showPriority, showComplexity } = params;
@@ -96,13 +96,36 @@ export async function visualizeTasksKanbanHandler(
 
     logger.info(`Generated Kanban board with ${tasks.length} tasks.`);
 
+    const suggested_actions: SuggestedAction[] = [
+        {
+            tool_name: "list-tasks",
+            reason: "View tasks in a list format.",
+            user_facing_suggestion: "Show tasks as a list?"
+        },
+        {
+            tool_name: "visualize-tasks-dashboard",
+            reason: "View the project dashboard.",
+            user_facing_suggestion: "Show project dashboard?"
+        }
+    ];
+    if (tasks.length === 0) {
+        suggested_actions.unshift({
+            tool_name: "create-task",
+            parameters: { title: "New Task", description: "Details for the new task." },
+            reason: "No tasks exist to visualize.",
+            user_facing_suggestion: "Create your first task?"
+        });
+    }
+
+
     return {
       content: [
         {
           type: "text",
           text: kanbanBoard
         }
-      ]
+      ],
+      suggested_actions
     };
   } catch (error: any) {
     logger.error('Error displaying Kanban board:', { error });
@@ -112,7 +135,8 @@ export async function visualizeTasksKanbanHandler(
           type: "text",
           text: `Error displaying Kanban board: ${error.message || String(error)}`
         }
-      ]
+      ],
+      isError: true
     };
   }
 }
