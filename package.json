@@ -1,7 +1,7 @@
 {
   "name": "conductor-tasks",
   "version": "0.2.0",
-  "description": "AI-powered task management system with great LLM support",
+  "description": "Task Manager for AI Development",
   "main": "./build/index.js",
   "type": "module",
   "bin": {
