@@ -4,12 +4,11 @@ import * as path from 'path';
 import ts from 'typescript'; 
 import { LLMManager } from '../llm/llmManager.js';
 import { ContextManager } from '../core/contextManager.js';
-import errorHandler, { ErrorCategory, ErrorSeverity, TaskError } from '../core/errorHandler.js';
+import { errorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../core/errorHandler.js';
 import markdownRenderer from '../core/markdownRenderer.js';
 import { ErrorHandler } from '../core/errorHandler.js';
 import logger from '../core/logger.js';
 import { JsonUtils } from '../core/jsonUtils.js';
-import { refinePrompt } from '../core/promptRefinementService.js';
 
 const DEFAULT_CONFIG = {
   defaultSubtasks: 3,

@@ -1,5 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import fs from 'fs';
+import path from 'path';
+import logger from './logger.js';
 
 export enum ErrorSeverity {
   INFO = 'INFO',
@@ -82,6 +83,14 @@ export class TaskError extends Error {
   }
 }
 
+interface ErrorHandlerOptions {
+  consoleEnabled?: boolean;
+  fileLoggingEnabled?: boolean;
+  logFilePath?: string;
+  maxLogSize?: number;
+  maxLogFiles?: number;
+}
+
 export class ErrorHandler {
   private static instance: ErrorHandler;
   private logFilePath: string;
@@ -98,23 +107,11 @@ export class ErrorHandler {
                      process.send !== undefined;
     this.isTestMode = process.env.NODE_ENV === 'test';
     this.consoleEnabled = !this.isMcpMode;
-    this.fileLoggingEnabled = process.env.FILE_LOGGING === 'true' || false;
+    this.fileLoggingEnabled = false;
     this.maxLogSize = parseInt(process.env.MAX_LOG_SIZE || '5242880', 10);
     this.maxLogFiles = parseInt(process.env.MAX_LOG_FILES || '5', 10);
 
-    const logsDir = process.env.LOGS_DIR || path.join(process.cwd(), 'logs');
-    this.logFilePath = path.join(logsDir, 'task-manager-errors.log');
-
-    if (this.fileLoggingEnabled && !fs.existsSync(logsDir)) {
-      try {
-        fs.mkdirSync(logsDir, { recursive: true });
-      } catch (error) {
-        this.fileLoggingEnabled = false;
-        if (this.consoleEnabled) {
-          console.error(`Failed to create logs directory: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-    }
+    this.logFilePath = '';
   }
 
   public static getInstance(): ErrorHandler {
@@ -124,33 +121,9 @@ export class ErrorHandler {
     return ErrorHandler.instance;
   }
 
-  public configure(options: {
-    consoleEnabled?: boolean;
-    fileLoggingEnabled?: boolean;
-    logFilePath?: string;
-    maxLogSize?: number;
-    maxLogFiles?: number;
-  }): void {
+  public configure(options: ErrorHandlerOptions): void {
     if (options.consoleEnabled !== undefined) {
       this.consoleEnabled = options.consoleEnabled;
-    }
-    if (options.fileLoggingEnabled !== undefined) {
-      this.fileLoggingEnabled = options.fileLoggingEnabled;
-    }
-    if (options.logFilePath) {
-      this.logFilePath = options.logFilePath;
-
-      const logsDir = path.dirname(options.logFilePath);
-      if (!fs.existsSync(logsDir)) {
-        try {
-          fs.mkdirSync(logsDir, { recursive: true });
-        } catch (error) {
-          this.fileLoggingEnabled = false;
-          if (this.consoleEnabled) {
-            console.error(`Failed to create logs directory: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
-      }
     }
     if (options.maxLogSize) {
       this.maxLogSize = options.maxLogSize;
@@ -189,12 +162,8 @@ export class ErrorHandler {
       }
     }
 
-    if (this.fileLoggingEnabled && !this.isTestMode) {
-      this.logToFile(errorString);
-    }
-
-    if (this.isTestMode) {
-
+    if (this.isMcpMode && process.send) {
+      process.send({ type: 'error', payload: { message: errorString } });
     }
   }
 
@@ -243,52 +212,6 @@ export class ErrorHandler {
     );
   }
 
-  private logToFile(message: string): void {
-    try {
-
-      if (fs.existsSync(this.logFilePath)) {
-        const stats = fs.statSync(this.logFilePath);
-        if (stats.size >= this.maxLogSize) {
-          this.rotateLogFiles();
-        }
-      }
-
-      fs.appendFileSync(this.logFilePath, `${message}\n\n`, 'utf8');
-    } catch (error) {
-
-      this.fileLoggingEnabled = false;
-      if (this.consoleEnabled && !this.isMcpMode) {
-        console.error(`Failed to write to log file: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-  }
-
-  private rotateLogFiles(): void {
-    try {
-
-      const oldestLogPath = `${this.logFilePath}.${this.maxLogFiles - 1}`;
-      if (fs.existsSync(oldestLogPath)) {
-        fs.unlinkSync(oldestLogPath);
-      }
-
-      for (let i = this.maxLogFiles - 2; i >= 0; i--) {
-        const currentLogPath = i === 0 ? this.logFilePath : `${this.logFilePath}.${i}`;
-        const newLogPath = `${this.logFilePath}.${i + 1}`;
-
-        if (fs.existsSync(currentLogPath)) {
-          fs.renameSync(currentLogPath, newLogPath);
-        }
-      }
-
-      fs.writeFileSync(this.logFilePath, '', 'utf8');
-    } catch (error) {
-
-      if (this.consoleEnabled && !this.isMcpMode) {
-        console.error(`Failed to rotate log files: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-  }
-
   public static async tryCatch<T>(
     fn: () => Promise<T> | T,
     errorCategory: ErrorCategory,
@@ -318,4 +241,4 @@ export class ErrorHandler {
   }
 }
 
-export default ErrorHandler.getInstance();
+export const errorHandler = ErrorHandler.getInstance();

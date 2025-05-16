@@ -1,6 +1,6 @@
 {
   "name": "conductor-tasks",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Task Manager for AI Development",
   "main": "./build/index.js",
   "type": "module",

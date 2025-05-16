@@ -28,6 +28,13 @@ export declare class TaskError extends Error {
     constructor(message: string, category?: ErrorCategory, severity?: ErrorSeverity, context?: ErrorContext, originalError?: Error);
     toString(): string;
 }
+interface ErrorHandlerOptions {
+    consoleEnabled?: boolean;
+    fileLoggingEnabled?: boolean;
+    logFilePath?: string;
+    maxLogSize?: number;
+    maxLogFiles?: number;
+}
 export declare class ErrorHandler {
     private static instance;
     private logFilePath;
@@ -39,13 +46,7 @@ export declare class ErrorHandler {
     private maxLogFiles;
     private constructor();
     static getInstance(): ErrorHandler;
-    configure(options: {
-        consoleEnabled?: boolean;
-        fileLoggingEnabled?: boolean;
-        logFilePath?: string;
-        maxLogSize?: number;
-        maxLogFiles?: number;
-    }): void;
+    configure(options: ErrorHandlerOptions): void;
     handleError(error: TaskError | Error, silent?: boolean): void;
     createFileSystemError(message: string, context: Omit<ErrorContext, 'operation'> & {
         operation?: string;
@@ -56,9 +57,7 @@ export declare class ErrorHandler {
     createLLMError(message: string, context: Omit<ErrorContext, 'operation'> & {
         operation?: string;
     }, severity?: ErrorSeverity, originalError?: Error): TaskError;
-    private logToFile;
-    private rotateLogFiles;
     static tryCatch<T>(fn: () => Promise<T> | T, errorCategory: ErrorCategory, operation: string, context?: Omit<ErrorContext, 'operation'>, defaultValue?: T): Promise<T>;
 }
-declare const _default: ErrorHandler;
-export default _default;
+export declare const errorHandler: ErrorHandler;
+export {};

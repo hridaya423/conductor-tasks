@@ -1,21 +1,21 @@
 import winston from 'winston';
 import path from 'path';
-import fs from 'fs';
+// import fs from 'fs'; // No longer needed
 
 const isMcpMode = process.env.MCP_MODE === 'true' || 
                   process.argv.some(arg => arg.includes('mcp')) ||
                   process.send !== undefined;
 
-const logDir = path.join(process.cwd(), 'logs');
-const logFile = path.join(logDir, 'conductor.log');
+// const logDir = path.join(process.cwd(), 'logs'); // Removed
+// const logFile = path.join(logDir, 'conductor.log'); // Removed
 
-try {
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir);
-  }
-} catch (error) {
-  console.error('Could not create log directory:', error);
-}
+// try { // Removed
+//   if (!fs.existsSync(logDir)) { // Removed
+//     fs.mkdirSync(logDir); // Removed
+//   } // Removed
+// } catch (error) { // Removed
+//   console.error('Could not create log directory:', error); // Removed
+// } // Removed
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -31,14 +31,12 @@ const logger = winston.createLogger({
         msg += ` ${meta}`;
       }
       if (stack) {
-
-        msg += `\n${stack}`;
+        msg += `\\n${stack}`;
       }
       return msg;
     })
   ),
   transports: [
-
     new winston.transports.Console({
       level: isMcpMode ? 'warn' : 'info',
       format: winston.format.combine(
@@ -46,35 +44,32 @@ const logger = winston.createLogger({
         winston.format.printf(({ timestamp, level, message, stack }) => {
           let msg = `${timestamp} [${level}]: ${message}`;
           if (stack) {
-            msg += `\n${stack}`;
+            msg += `\\n${stack}`;
           }
           return msg;
         })
       )
     }),
-
-    new winston.transports.File({
-      filename: logFile,
-      level: 'debug',
-      maxsize: 5 * 1024 * 1024,
-      maxFiles: 3,
-      tailable: true,
-    })
+    // new winston.transports.File({ // Removed
+    //   filename: logFile, // Removed
+    //   level: 'debug', // Removed
+    //   maxsize: 5 * 1024 * 1024, // Removed
+    //   maxFiles: 3, // Removed
+    //   tailable: true, // Removed
+    // }) // Removed
   ],
-  exceptionHandlers: [
-
-    new winston.transports.File({ filename: path.join(logDir, 'exceptions.log') })
-  ],
-  rejectionHandlers: [
-
-    new winston.transports.File({ filename: path.join(logDir, 'rejections.log') })
-  ],
+  // exceptionHandlers: [ // Removed
+  //   new winston.transports.File({ filename: path.join(logDir, 'exceptions.log') }) // Removed
+  // ], // Removed
+  // rejectionHandlers: [ // Removed
+  //   new winston.transports.File({ filename: path.join(logDir, 'rejections.log') }) // Removed
+  // ], // Removed
+  exceptionHandlers: [], // Set to empty array
+  rejectionHandlers: [], // Set to empty array
   exitOnError: false
 });
 
-logger.info('Logger initialized');
-logger.debug(`MCP Mode: ${isMcpMode}`);
-logger.debug(`Log level: ${logger.level}`);
-logger.debug(`Log file: ${logFile}`);
+logger.info('Logger initialized (console only)');
+// logger.debug(`Log file: ${logFile}`); // Removed
 
 export default logger;

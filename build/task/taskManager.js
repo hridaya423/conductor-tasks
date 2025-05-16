@@ -2,7 +2,7 @@ import { TaskPriority, TaskStatus, ContextPriority, CodeSymbolType } from '../co
 import * as fs from 'fs';
 import * as path from 'path';
 import ts from 'typescript';
-import errorHandler, { ErrorCategory, ErrorSeverity, TaskError } from '../core/errorHandler.js';
+import { errorHandler, ErrorCategory, ErrorSeverity, TaskError } from '../core/errorHandler.js';
 import markdownRenderer from '../core/markdownRenderer.js';
 import { ErrorHandler } from '../core/errorHandler.js';
 import logger from '../core/logger.js';
