@@ -1,0 +1,191 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Comprehensive guide for using Conductor Tasks to manage AI-driven development workflows, closely following best practices.
+globs: **/*
+alwaysApply: true
+---
+# Conductor Tasks: Comprehensive AI Development Workflow
+
+This guide outlines the detailed process for using Conductor Tasks to manage software development projects, especially when an AI assistant is driving the workflow via MCP tools. It is based on established best practices for AI task management.
+
+## Primary Interaction: MCP Server vs. CLI
+
+Conductor Tasks offers two primary ways to interact:
+
+1.  **MCP Server (Strongly Recommended for AI Integration)**:
+    *   For AI agents and integrated development environments (like Cursor), interacting via the **MCP server is the mandated method**.
+    *   The MCP server exposes Conductor Tasks functionality through a set of structured tools (e.g., \`get-task\`, \`update-task\`, \`list-tasks\`, \`add-task-note\`).
+    *   This method offers better performance, structured data exchange (JSON), richer error handling, and more consistent behavior.
+    *   **Always prioritize using MCP tools when available and as described.**
+
+2.  **\`conductor-tasks\` CLI (For Users & Manual Operations)**:
+    *   The global \`conductor-tasks\` command provides a user-friendly interface for direct terminal interaction by developers.
+    *   CLI commands often mirror MCP tools (e.g., \`conductor-tasks list\` corresponds to the \`list-tasks\` MCP tool).
+    *   As an AI, you should **not** attempt to use or parse CLI output. Your interaction is exclusively through MCP tools.
+
+## Standard Development Workflow Process (AI-Driven)
+
+The following steps detail a typical AI-assisted development workflow using Conductor Tasks MCP tools. Adherence to this process, especially the note-taking, is crucial.
+
+1.  **Project Initialization**:
+    *   If starting a new project or if \`TASKS.md\` (the central task definition file) is missing, use the \`initialize-project\` tool. This creates \`TASKS.md\` and any necessary project structure (e.g., \`.conductor/\` directory) and IDE rules.
+    *   If a Product Requirements Document (PRD) is provided, use \`parse-prd --input='<path_to_prd_file>'\` (if available as an MCP tool) or guide the user to run the equivalent CLI command to populate \`TASKS.md\` with initial tasks.
+
+2.  **Situational Awareness & Task Selection**:
+    *   **View All Tasks**: Begin sessions with \`list-tasks\` to get a comprehensive overview of all tasks, their statuses, IDs, and dependencies.
+    *   **Determine Next Task**: Use \`get-next-task\` to identify the most appropriate task to work on. This tool considers dependencies (prerequisites must be 'completed'), priority, and potentially other heuristics.
+    *   **Clarify Task Details**: If \`TASKS.md\` or individual task files (if used by Conductor Tasks, e.g., in \`.conductor/tasks/\`) exist, you can use \`read_file\` to get more context. However, \`get-task\` is the primary tool for specific task details.
+
+3.  **Task Analysis & Understanding**:
+    *   **View Specific Task**: Once a task is selected, use \`get-task --id <task_id>\` to retrieve its full details: description, status, dependencies, priority, existing notes/details, and subtasks.
+    *   **Complexity Assessment**: While Conductor Tasks may not have a direct \`analyze_project_complexity\` MCP tool like some systems, you should infer complexity from the task description, number of subtasks, and your understanding of the work involved. If a task seems too large or vague, it's a candidate for \`expand-task\`.
+
+4.  **Task Breakdown (Expansion)**:
+    *   For complex tasks, use \`expand-task --id <task_id> [--prompt "<optional_context_for_expansion>"]\`. This tool should break the parent task into smaller, actionable sub-tasks written to \`TASKS.md\`.
+    *   If sub-tasks need to be cleared before regeneration, Conductor Tasks might require manual guidance for the user or a specific \`update-task\` call if it supports removing all subtasks. (The reference mentions \`clear_subtasks\` which may not have a direct Conductor equivalent).
+    *   Review generated sub-tasks using \`get-task --id <parent_task_id>\` (which should show subtasks).
+
+5.  **Implementation**:
+    *   Follow the details in the task/sub-task. Use your coding and file manipulation tools (\`read_file\`, \`write_to_file\`, \`apply_diff\`, \`search_files\`, \`list_code_definition_names\`).
+    *   **Crucially, follow the "Iterative Subtask Implementation" process detailed below.**
+
+6.  **Verification & Testing**:
+    *   Implement or execute tests as per the task's requirements or project's testing strategy.
+    *   Use \`execute_command\` to run test scripts (e.g., \`npm test\`, \`pytest\`). Analyze output carefully.
+
+7.  **Status Updates**:
+    *   Use \`update-task --id <task_id> --status <new_status>\` (e.g., "pending", "in progress", "review", "completed", "blocked"). Mark 'completed' only after full implementation and verification.
+
+8.  **Handling Implementation Drift & New Tasks**:
+    *   If current work reveals that future tasks need changes, or if new tasks/sub-tasks are discovered:
+        *   Use \`update-task --id <existing_task_id> --description "<new_description_or_details>"\` to modify existing tasks.
+        *   To add a new top-level task, use \`create-task --title "..." --description "..." [--priority <...>] [--dependencies <...>] \` (assuming a \`create-task\` MCP tool).
+        *   To add a new sub-task to an existing parent, you might use \`update-task --id <parent_id>\` with parameters to add a subtask, or \`create-task\` with a \`parentId\` parameter. If not directly supported, use \`add-task-note\` on the parent to describe the needed sub-task and guide the user.
+
+9.  **Managing Task Dependencies**:
+    *   Use \`update-task\` if it supports modifying dependencies. Otherwise, clearly document needed dependency changes using \`add-task-note\` for user action.
+    *   Use \`validate-dependencies\` (if available as an MCP tool) to check for circular references or other issues.
+
+10. **CRITICAL - Detailed Note-Taking (\`add-task-note\`)**:
+    *   This is the cornerstone of your workflow. For every task or sub-task, and for every significant step within it, use \`add-task-note --id <task_id> --note "..."\`.
+    *   Notes should include: your plan, tools used, files changed (with diff snippets if helpful), commands run and their key outcomes, assumptions, clarifications received, and rationale for decisions. (See "Iterative Subtask Implementation").
+
+## Task Complexity Analysis (Conceptual)
+
+*   While a dedicated MCP tool like \`analyze_project_complexity\` might not exist for Conductor Tasks, you should perform a conceptual analysis.
+*   When you receive a task via \`get-task\`, assess its description, requirements, and any existing subtasks.
+*   If a task appears overly complex, very vague, or too large to be accomplished in a few focused steps, it's a prime candidate for \`expand-task\`.
+*   Document your complexity assessment in a note on the task (\`add-task-note\`) before deciding to expand it.
+
+## Task Breakdown Process (Using \`expand-task\`)
+
+*   When a task needs breakdown, use \`expand-task --id <parent_task_id> [--prompt "<specific_instructions_for_breakdown>"]\`.
+*   The \`--prompt\` can guide the expansion (e.g., "Break this down into 5 subtasks focusing on frontend, backend, API, testing, and documentation").
+*   After expansion, use \`get-task --id <parent_task_id>\` to review the newly created subtasks.
+*   If subtasks need further refinement (e.g., more details, different descriptions), use \`update-task --id <subtask_id> --description "..."\` or \`add-task-note --id <subtask_id> --note "Refining subtask: ..." \`.
+
+## Implementation Drift Handling
+
+*   If your current implementation work on Task A reveals that a future Task B (or its plan) is no longer valid or needs changes:
+    1.  Document this finding thoroughly on Task A using \`add-task-note\`.
+    2.  Use \`update-task --id <Task_B_id> --description "<new_description_reflecting_change>" --status "pending"\` (or adjust other fields as needed).
+    3.  Add a note to Task B using \`add-task-note --id <Task_B_id> --note "This task was updated due to findings during implementation of Task A (see Task A notes). Original plan may need revision."\`
+
+## Task Status Management
+
+*   Use precise statuses via \`update-task --id <task_id> --status <status_value>\`:
+    *   **pending**: Ready to be worked on, all dependencies (if any) met.
+    *   **in progress**: Actively being worked on.
+    *   **completed**: Finished, implemented, and verified.
+    *   **blocked**: Cannot proceed (e.g., waiting for external input, unresolved dependency). Add a note explaining the blockage.
+    *   **review**: Implementation is done, awaiting user/peer review.
+    *   (Conductor Tasks might support other custom statuses; adapt as needed.)
+
+## Task Structure Fields (Commonly Expected via MCP Tools)
+
+*   **id**: Unique identifier (e.g., "1", "1.1").
+*   **title**: Brief, descriptive title.
+*   **description**: Concise summary of the task.
+*   **status**: Current state (see above).
+*   **dependencies**: Array of prerequisite task IDs.
+*   **priority**: Importance level (e.g., "high", "medium", "low").
+*   **details** / **notes**: In-depth implementation instructions, context, or your logged progress via \`add-task-note\`. This is often an array of note objects, each with content and a timestamp.
+*   **subtasks**: Array of sub-task objects, if any, nested or referenced by ID.
+
+## Configuration Management (Awareness)
+
+*   Conductor Tasks configuration (e.g., for its own potential AI features, or project-specific settings) might be in \`.conductor/config.json\` or via environment variables (e.g., in \`.cursor/mcp.json\` for MCP server).
+*   You typically don't manage these. However, if MCP tools fail in a way that suggests missing API keys for Conductor's *internal* operations, note this for the user.
+
+## Determining the Next Task (Detailed)
+
+*   Run \`get-next-task\`. This tool should identify tasks whose dependencies are all 'completed', prioritizing by 'priority' and then by ID or creation order.
+*   The response should provide enough detail for you to then call \`get-task --id <next_task_id>\` for the full context.
+*   Always start your work session by identifying the correct next task.
+
+## Viewing Specific Task Details (Detailed)
+
+*   Run \`get-task --id <task_id_or_subtask_id>\`.
+*   Expect comprehensive information: full title, description, current status, priority, all dependencies (ideally with their statuses), all notes/details (chronologically if possible), and a list of all subtasks (if any, with their IDs and titles/statuses).
+*   This is your primary source of truth for what needs to be done for a task.
+
+## Managing Task Dependencies (Conceptual)
+
+*   When using \`create-task\` or \`update-task\`, if these tools support a \`dependencies\` parameter (e.g., an array of task IDs), use it to set prerequisites.
+*   If a task's dependencies need to be changed, use \`update-task --id <task_id> --dependencies "[<new_dep_id_1>, <new_dep_id_2>]"\`.
+*   If direct MCP tool support for dependency management is limited, clearly document required dependency changes in a task note for the user to implement manually in \`TASKS.md\`.
+*   Always use \`validate-dependencies\` (if available) after significant changes.
+
+## Iterative Subtask Implementation (CRITICAL PROCESS)
+
+This is the core loop for performing work on any given subtask (or sufficiently small task):
+
+1.  **Understand the Goal (Preparation)**:
+    *   Use \`get-task --id <subtask_id>\` to thoroughly review the subtask's description, existing notes, and any other details. Ensure you understand the specific objective.
+
+2.  **Initial Exploration & Planning (Iteration 1 - The "Look")**:
+    *   This is your first attempt to create a concrete implementation plan.
+    *   Use \`read_file\`, \`search_files\`, \`list_files\` to explore the codebase. Identify precise files, functions, and even specific lines of code that will need modification or serve as context.
+    *   Determine the intended code changes (diffs), new file content, or commands to execute.
+    *   Gather *all* relevant details from this exploration.
+
+3.  **Log the Plan (The "Leap" of documentation)**:
+    *   Run \`add-task-note --id <subtask_id> --note "Initial Plan for <subtask_title>: Based on exploration, the plan is to [modify file X at line Y, create file Z with content..., run command A]. Rationale: [...]. Potential challenges: [...]"\`.
+    *   Provide the *complete and detailed* findings. Include file paths, line numbers, proposed diffs/content, commands, reasoning. **Do not omit details.** The goal is a rich, timestamped log.
+
+4.  **Verify Plan Logging (Quick Check)**:
+    *   Optionally, run \`get-task --id <subtask_id>\` again briefly to confirm your detailed plan was successfully appended to the notes.
+
+5.  **Begin Implementation (Action)**:
+    *   Set status: \`update-task --id <subtask_id> --status "in progress"\`.
+    *   Start executing the plan using MCP tools (\`apply_diff\`, \`write_to_file\`, \`execute_command\`).
+
+6.  **Refine and Log Progress (Iteration 2+ - The "Learn and Log" Loop)**:
+    *   As implementation progresses, you will encounter challenges, discover nuances, or confirm successful approaches.
+    *   **Before appending new information**: Briefly review the *existing* notes for the subtask (from \`get-task\` context) to ensure your update adds fresh insights and avoids redundancy.
+    *   **Regularly** use \`add-task-note --id <subtask_id> --note "Progress Update: [Action taken (e.g., 'Applied diff to Main.java line 45 to add error handling'), Result (e.g., 'Successful'), Observation/Finding (e.g., 'Discovered related function Y needs update'), Next step...]" \`.
+    *   **Crucially, log**:
+        *   What worked ("fundamental truths" discovered).
+        *   What didn't work and why (to avoid repeating mistakes).
+        *   Specific code snippets or configurations that were successful.
+        *   Decisions made, especially if confirmed with user input via \`ask_followup_question\`.
+        *   Any deviations from the initial plan and the reasoning.
+    *   The objective is to continuously enrich the subtask's notes, creating a detailed, auditable log of the implementation journey.
+
+7.  **Mark Task Complete**:
+    *   After verifying the implementation (e.g., tests pass, functionality confirmed), mark the subtask: \`update-task --id <subtask_id> --status "completed"\`.
+    *   Add a final summary note: \`add-task-note --id <subtask_id> --note "Subtask <subtask_title> completed. Solution involved [brief summary of changes/actions]. Verified by [method, e.g., 'all unit tests passing']." \`.
+
+## Code Analysis & Refactoring Techniques (Conceptual)
+
+*   While Conductor Tasks may not have specific MCP tools for advanced code analysis, you can use general tools:
+    *   **Top-Level Function Search**: Use \`search_files --path src/ --regex "export (async function|function|const) \w+" --file_pattern "*.js"\` (adjust for language) to understand module structures or plan refactors.
+    *   **Dependency Analysis (Manual)**: By reading import statements (\`read_file\`) and using \`search_files\` for function/class usages, you can manually trace dependencies to inform refactoring.
+*   Log any significant findings from such analysis in the relevant task notes.
+
+---
+*This workflow provides a comprehensive guideline. Adapt it based on the precise capabilities of the Conductor Tasks MCP tools and specific project needs.*

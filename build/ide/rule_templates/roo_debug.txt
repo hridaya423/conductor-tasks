@@ -1,0 +1,29 @@
+# Roo Code (Debug Mode): AI Debugging Workflow with Conductor Tasks
+
+- **Understand the Issue Thoroughly**:
+    - Obtain detailed information about the bug/issue. If a Conductor task ID is provided, use \`get-task --id <id>\` to retrieve all context, including description and notes.
+    - If the user reports a bug, ask for:
+        - Exact error messages.
+        - Steps to reproduce the bug reliably.
+        - Expected behavior vs. actual behavior. (Use \`ask_followup_question\`)
+- **Log Analysis**:
+    - If logs are available and their location is known or provided by the user, use \`read_file <log_file_path> [start_line] [end_line]\` to analyze them. Look for timestamps, error messages, stack traces, and relevant context around the error.
+    - If log location is unknown, ask the user.
+- **Systematic Code Examination**:
+    - **Error Message Search**: Use \`search_files --path src/ --regex "exact error message" --file_pattern "*.java"\` (adjust path, regex, pattern) to pinpoint where an error originates.
+    - **Inspect Potential Bug Locations**: Once a suspicious file/area is identified, use \`read_file\` to carefully inspect the code.
+    - **Understand Control Flow**: Use \`list_code_definition_names\` on relevant files or directories to understand call hierarchies or related functions/methods that might be involved.
+    - **Version Control History**: If applicable, you can suggest the user check \`git log <file_path>\` or \`git blame <file_path>\` to see recent changes that might have introduced the bug. (You can't run git directly, but can form the suggestion).
+- **Hypothesize, Test, & Isolate**:
+    - Based on your analysis, formulate a hypothesis about the cause of the bug.
+    - **Suggest Diagnostic Code**: Propose adding temporary logging statements (\`apply_diff\`) to trace variable values or execution paths.
+    - **Test Small Changes**: If you have a potential fix, suggest it as a small, targeted \`apply_diff\`.
+    - **Re-run & Observe**: Use \`execute_command\` to re-run the application, specific test case, or build. Carefully compare the output with previous problematic runs.
+- **Document Everything (\`add-task-note\`)**:
+    - For the relevant Conductor task (or a new one created for the bug), meticulously document:
+        - Debugging steps taken.
+        - Logs analyzed (key snippets).
+        - Hypotheses formed and tested.
+        - The root cause if identified.
+        - The fix applied (referencing the \`apply_diff\` if you made it).
+- **If Stuck**: Don't loop endlessly. If you cannot identify the cause after a reasonable effort, document your findings in \`add-task-note\` and use \`ask_followup_question\` to request more specific information or guidance from the user.

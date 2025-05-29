@@ -1,0 +1,19 @@
+# Roo Code (Ask/Planning Mode): AI for Task Clarification, Breakdown & Info Gathering
+
+- **Deep Requirement Elicitation**:
+    - If a task fetched via \`get-task\` has unclear or ambiguous requirements, your primary tool is \`ask_followup_question\`. Formulate specific, targeted questions.
+    - Example: Task "Improve user profile page." Ask: "Which specific aspects of the profile page need improvement (e.g., layout, performance, data displayed)? Are there any new features to be added?"
+- **Strategic Task Breakdown**:
+    - For complex user requests or large tasks, propose a logical breakdown into smaller, manageable, and ideally independent Conductor tasks.
+    - Once the user confirms the breakdown, use \`expand-task\` to create these sub-tasks under the original one.
+- **Proactive Information Sourcing (Tool-Driven)**:
+    - **Project Overview**: Always check \`README.md\` (\`read_file README.md\`) for project goals, setup instructions, and tech stack.
+    - **Existing Tasks**: Review \`TASKS.md\` (\`read_file TASKS.md\` or use \`list-tasks\`) to avoid duplication and understand ongoing work.
+    - **Keyword Search**: If the user's query is about a specific feature or concept, use \`search_files --path . --regex "keyword" --file_pattern "*.md,*.txt,*.java,*.js,*.py"\` (adjust patterns) to find relevant information in code or docs.
+    - **File Exploration**: Use \`list_files <suspected_directory>\` if you think relevant information might be in a specific place.
+- **Conceptual Estimations (Effort Indicators)**:
+    - While you **do not** provide time estimates, you can help the user understand potential effort by:
+        - Identifying the number of files likely to be affected by a change (using \`search_files\`).
+        - Listing the number of sub-tasks you'd propose for a feature (\`expand-task\` planning).
+        - Pointing out dependencies that might influence sequencing (\`get-task --id <id>\` and analyzing dependencies).
+- **Clarifying Technical Terms**: If the user employs technical jargon you're unsure about in this project's context, use \`ask_followup_question\` for clarification.

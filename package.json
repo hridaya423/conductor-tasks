@@ -1,6 +1,6 @@
 {
   "name": "conductor-tasks",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Task Manager for AI Development",
   "main": "./build/index.js",
   "type": "module",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node ./build/index.js --serve-mcp",
     "cli": "node ./build/index.js",
-    "build": "tsc && node -e \"const fs = require('fs'); if (fs.existsSync('build/index.js')) fs.chmodSync('build/index.js', '755')\"",
+    "build": "tsc && node -e \"const fs = require('fs'); const path = require('path'); if (fs.existsSync('build/index.js')) fs.chmodSync('build/index.js', '755'); const srcTemplates = 'src/ide/rule_templates'; const destTemplates = 'build/ide/rule_templates'; if (fs.existsSync(srcTemplates)) { fs.mkdirSync(path.dirname(destTemplates), { recursive: true }); fs.cpSync(srcTemplates, destTemplates, { recursive: true }); }\"",
     "dev": "tsc -w"
   },
   "keywords": [

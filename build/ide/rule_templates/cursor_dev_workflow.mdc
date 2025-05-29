@@ -1,0 +1,57 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: Cursor-specific development workflow enhancements when using Conductor Tasks
+globs: **/*
+alwaysApply: true
+---
+
+# Cursor Development Workflow with Conductor Tasks
+
+This document outlines how to best utilize Cursor's unique capabilities alongside the [Conductor Tasks AI Development Workflow](mdc:conductor_tasks_workflow.mdc).
+
+## Leveraging Cursor's AI Features for Task Implementation
+
+1.  **Code Generation & Modification**:
+    *   When a Conductor task requires writing or modifying code, utilize Cursor's built-in AI code generation (e.g., "Generate code for...", "Edit selection...") for relevant segments.
+    *   **Always** provide the Conductor task ID and its details as context to Cursor's AI for more relevant suggestions. For example: "Implement the following for Conductor Task TSK-42 (details: <paste task details>): <your specific code request>".
+    *   After Cursor generates code, critically review it against the task requirements.
+
+2.  **Chat for Clarification & Debugging**:
+    *   Use Cursor's chat feature to discuss complex parts of a task, debug issues, or explore alternative implementations.
+    *   Frame your questions to the chat in the context of the Conductor task you are working on.
+    *   Summarize key insights or decisions from Cursor chat discussions into the Conductor task notes using \`add-task-note --id <task_id> --note "Insights from Cursor chat: ..." \`.
+
+3.  **Diffing and Review**:
+    *   Use Cursor's diff views to review changes you've made (or Cursor's AI has made) before marking a task segment as complete or adding notes.
+    *   Ensure changes align with the Conductor task objectives.
+
+## Integrating Conductor Tasks into Cursor's Flow
+
+1.  **Starting Your Session**:
+    *   Use \`get-next-task\` (via MCP tool) to identify your current Conductor task.
+    *   Keep the task details (obtained via \`get-task\`) readily available, perhaps copied into a comment in your current file or a scratchpad in Cursor, for easy reference while coding.
+    *   The user might use \`visualize-tasks-kanban\` in their terminal; you rely on \`list-tasks\` and \`get-task\` for your information.
+
+2.  **Multi-File Operations**:
+    *   Cursor excels at context-aware changes across multiple files. When a Conductor task involves changes to several files:
+        *   Clearly outline the multi-file plan in the task notes (\`add-task-note\`).
+        *   Use Cursor's features (e.g., "AI edit selection" with instructions spanning multiple files, or by opening relevant files and making targeted edits).
+        *   After changes, confirm all modifications align with the task.
+
+3.  **Documentation and Commits**:
+    *   When a task or sub-task is completed:
+        *   Ensure all work is documented in Conductor using \`add-task-note\`.
+        *   If guiding the user on version control, suggest clear commit messages that reference the Conductor Task ID (e.g., \`git commit -m "feat(auth): Implement OAuth callback for TSK-45"\`). Cursor's source control integration can be used by the user for this.
+
+## AI-Specific Reminders in Cursor
+
+*   **MCP Tools are Primary for Tasks**: While Cursor has its own powerful AI, your interaction with the *Conductor Tasks system itself* (fetching, updating, listing tasks) **must** be through the provided MCP tools.
+*   **Context is Key**: Always provide sufficient context from the Conductor task (ID, description, requirements) when prompting Cursor's AI for code generation or assistance.
+*   **Record Keeping**: Use \`add-task-note\` in Conductor Tasks as the canonical record of your work on a task, even if parts of the implementation were assisted by Cursor's AI. This keeps the task history centralized.
+
+By combining the structured approach of Conductor Tasks with Cursor's advanced AI capabilities, you can achieve a highly efficient and effective development workflow.
+

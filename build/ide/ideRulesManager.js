@@ -72,23 +72,43 @@ export class IDERulesManager {
     }
     async readRuleTemplate(filename) {
         try {
-            const templatePath = path.resolve(__dirname, '..', '..', 'src', 'ide', 'rule_templates', filename);
-            if (fs.existsSync(templatePath)) {
-                return await fsPromises.readFile(templatePath, 'utf8');
-            }
-            else {
-                const altTemplatePath = path.resolve(__dirname, 'rule_templates', filename);
-                if (fs.existsSync(altTemplatePath)) {
-                    logger.warn(`Reading template from alt path: ${altTemplatePath}`);
-                    return await fsPromises.readFile(altTemplatePath, 'utf8');
+            // Try multiple possible locations for rule templates
+            const possiblePaths = [
+                // Development/source location
+                path.resolve(__dirname, '..', '..', 'src', 'ide', 'rule_templates', filename),
+                // Build location (for npm installs)
+                path.resolve(__dirname, 'rule_templates', filename),
+                // Alternative build location
+                path.resolve(__dirname, '..', 'ide', 'rule_templates', filename),
+                // Fallback to current directory
+                path.resolve(process.cwd(), 'src', 'ide', 'rule_templates', filename)
+            ];
+            for (const templatePath of possiblePaths) {
+                if (fs.existsSync(templatePath)) {
+                    logger.info(`Reading rule template from: ${templatePath}`);
+                    return await fsPromises.readFile(templatePath, 'utf8');
                 }
-                logger.warn(`Rule template file not found at primary: ${templatePath} or alt: ${altTemplatePath}. (__dirname: ${__dirname})`);
-                return `// Rule template file not found: ${filename}`;
             }
+            // If no template found, log the attempted paths for debugging
+            logger.error(`Rule template file not found: ${filename}. Attempted paths:`, possiblePaths);
+            // Return a more helpful error message
+            return `# Rule template not found: ${filename}
+# 
+# This appears to be an installation issue. The rule template files are missing.
+# Please report this issue at: https://github.com/hridaya423/conductor-tasks/issues
+# 
+# Attempted paths:
+${possiblePaths.map(p => `# - ${p}`).join('\n')}
+#
+# As a workaround, you can manually create this file with your own rules.
+`;
         }
         catch (error) {
             logger.error(`Error reading rule template ${filename}:`, { error });
-            return `// Error reading rule template ${filename}`;
+            return `# Error reading rule template ${filename}
+# Error: ${error instanceof Error ? error.message : String(error)}
+# Please report this issue at: https://github.com/hridaya423/conductor-tasks/issues
+`;
         }
     }
     async createDefaultRuleFiles() {
@@ -358,6 +378,67 @@ export class IDERulesManager {
             return null;
         return rulesForType.rules.find((rule) => rule.name === ruleName) || null;
     }
+    // Define conductor-tasks managed files for each IDE type
+    getConductorManagedFiles(ideType) {
+        switch (ideType) {
+            case IDEType.CURSOR:
+                return [
+                    'conductor_tasks_workflow.mdc',
+                    'conductor_task_management.mdc',
+                    'cursor_dev_workflow.mdc'
+                ];
+            case IDEType.CLINE:
+                return ['conductor-tasks.rules'];
+            case IDEType.ROO_CODE:
+                return [
+                    '.roomode',
+                    'rules/conductor-tasks-general.rules',
+                    'rules-architect/architecture-conductor.rules',
+                    'rules-ask/planning-clarification-conductor.rules',
+                    'rules-code/coding-conductor.rules',
+                    'rules-debug/debugging-conductor.rules',
+                    'rules-test/testing-conductor.rules'
+                ];
+            case IDEType.WINDSURF:
+                return ['.windsurfrules'];
+            default:
+                return [];
+        }
+    }
+    // Remove only conductor-tasks managed files, preserve user files
+    async removeConductorManagedFiles(ideType) {
+        try {
+            const rulesDir = this.getRulesDirectoryForIDE();
+            const managedFiles = this.getConductorManagedFiles(ideType);
+            logger.info(`Removing conductor-tasks managed files for ${ideType} from ${rulesDir}`);
+            for (const file of managedFiles) {
+                const filePath = path.join(rulesDir, file);
+                if (fs.existsSync(filePath)) {
+                    await fsPromises.unlink(filePath);
+                    logger.info(`Removed conductor-tasks managed file: ${filePath}`);
+                }
+            }
+            // For ROO_CODE, also clean up empty directories that we created
+            if (ideType === IDEType.ROO_CODE) {
+                const rooSubDirs = ['rules', 'rules-architect', 'rules-ask', 'rules-code', 'rules-debug', 'rules-test'];
+                for (const subDir of rooSubDirs) {
+                    const dirPath = path.join(rulesDir, subDir);
+                    if (fs.existsSync(dirPath)) {
+                        const files = await fsPromises.readdir(dirPath);
+                        // Only remove if directory is empty or only contains conductor files
+                        const nonConductorFiles = files.filter(f => !f.includes('conductor'));
+                        if (nonConductorFiles.length === 0) {
+                            await fsPromises.rmdir(dirPath);
+                            logger.info(`Removed empty conductor directory: ${dirPath}`);
+                        }
+                    }
+                }
+            }
+        }
+        catch (error) {
+            logger.error(`Failed to remove conductor-tasks managed files for ${ideType}`, { error });
+        }
+    }
     async forceResetRules() {
         try {
             logger.info(`Force resetting rules for IDE type: ${this.ideType}`);
@@ -367,24 +448,17 @@ export class IDERulesManager {
             if (this.ideType !== IDEType.AUTO) {
                 const rulesDir = this.getRulesDirectoryForIDE();
                 logger.info(`Rules directory for IDE ${this.ideType}: ${rulesDir}`);
+                // Instead of deleting entire directory, only remove conductor-tasks managed files
                 if (fs.existsSync(rulesDir)) {
-                    if (this.ideType === IDEType.CURSOR || this.ideType === IDEType.CLINE || this.ideType === IDEType.ROO_CODE) {
-                        await this.removeDirectoryRecursive(rulesDir);
-                    }
-                    else if (this.ideType === IDEType.WINDSURF) {
-                        const windsurfFile = path.join(rulesDir, '.windsurfrules');
-                        if (fs.existsSync(windsurfFile)) {
-                            await fsPromises.unlink(windsurfFile);
-                        }
-                    }
+                    await this.removeConductorManagedFiles(this.ideType);
                 }
-                if (this.ideType === IDEType.CURSOR || this.ideType === IDEType.CLINE || this.ideType === IDEType.ROO_CODE) {
-                    if (!fs.existsSync(rulesDir)) {
-                        fs.mkdirSync(rulesDir, { recursive: true });
-                    }
+                // Ensure the rules directory exists
+                if (!fs.existsSync(rulesDir)) {
+                    await fsPromises.mkdir(rulesDir, { recursive: true });
                 }
             }
             else {
+                // Handle AUTO mode - reset for all IDE types
                 for (const type of Object.values(IDEType)) {
                     if (type !== IDEType.AUTO && type !== IDEType.GENERIC) {
                         const originalIdeTypeForAutoLoop = this.ideType;
@@ -392,24 +466,16 @@ export class IDERulesManager {
                         const rulesDir = this.getRulesDirectoryForIDE();
                         this.setIDEType(originalIdeTypeForAutoLoop);
                         if (fs.existsSync(rulesDir)) {
-                            if (type === IDEType.CURSOR || type === IDEType.CLINE || type === IDEType.ROO_CODE) {
-                                await this.removeDirectoryRecursive(rulesDir);
-                            }
-                            else if (type === IDEType.WINDSURF) {
-                                const windsurfFile = path.join(this.workspaceRoot, '.windsurfrules');
-                                if (fs.existsSync(windsurfFile)) {
-                                    await fsPromises.unlink(windsurfFile);
-                                }
-                            }
+                            await this.removeConductorManagedFiles(type);
                         }
-                        if (type === IDEType.CURSOR || type === IDEType.CLINE || type === IDEType.ROO_CODE) {
-                            if (!fs.existsSync(rulesDir)) {
-                                fs.mkdirSync(rulesDir, { recursive: true });
-                            }
+                        // Ensure the rules directory exists
+                        if (!fs.existsSync(rulesDir)) {
+                            await fsPromises.mkdir(rulesDir, { recursive: true });
                         }
                     }
                 }
             }
+            // Create/update conductor-tasks rule files
             if (this.ideType === IDEType.AUTO) {
                 const originalType = this.ideType;
                 for (const type of Object.values(IDEType)) {
@@ -423,6 +489,7 @@ export class IDERulesManager {
             else {
                 await this.createDefaultRuleFiles();
             }
+            // Reload rules
             await this.loadRules(true);
             logger.info(`Successfully force reset rules for IDE type: ${this.ideType}`);
         }

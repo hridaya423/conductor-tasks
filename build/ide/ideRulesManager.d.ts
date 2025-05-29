@@ -20,5 +20,7 @@ export declare class IDERulesManager {
     private loadRulesForType;
     getRules(specificType?: IDEType): Promise<IDERules | null>;
     getRule(ruleName: string, ideType?: IDEType): Promise<IDERule | null>;
+    private getConductorManagedFiles;
+    private removeConductorManagedFiles;
     forceResetRules(): Promise<void>;
 }

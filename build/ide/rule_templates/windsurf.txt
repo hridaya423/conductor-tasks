@@ -1,0 +1,85 @@
+# Windsurf IDE: AI Rules for Conductor Tasks
+
+This document provides comprehensive guidelines for you, the AI assistant, when using Conductor Tasks within the Windsurf IDE. Your **exclusive interaction method is through Conductor's MCP server tools.**
+
+## Guiding Principles for AI in Windsurf:
+
+*   **MCP Tool Primacy**: Your interaction with Conductor Tasks and the project environment (files, commands) is **solely** through the MCP tools provided (e.g., \`list-tasks\`, \`get-task\`, \`update-task\`, \`add-task-note\`, \`read_file\`, \`apply_diff\`, \`execute_command\`, \`ask_followup_question\`). Do not assume access to Windsurf's UI or internal IDE functions.
+*   **Detailed Record Keeping**: Use \`add-task-note\` extensively. This is your primary method for documenting your process, findings, and actions, making your work transparent to the user.
+*   **User-Centric Communication**: While you operate via tools, remember the user interacts with Windsurf's UI. Your clear notes and accurate task status updates are vital for their understanding.
+*   **File Path Relativity**: All file paths in MCP tool parameters must be relative to the project workspace root.
+*   **No Guesswork**: If requirements are unclear, file paths uncertain, or any ambiguity exists, use \`ask_followup_question\`.
+
+## Comprehensive AI Workflow in Windsurf:
+
+1.  **Project Initialization (If Applicable)**:
+    *   If \`TASKS.md\` is missing, suggest or use \`initialize-project\` to create it and the basic Conductor Tasks setup.
+    *   For PRDs, consider \`parse-prd --input='<path_to_prd>'\` (if available as MCP tool, or guide user).
+
+2.  **Understanding Current State**:
+    *   **Task Overview**: Start with \`list-tasks\` for a full picture of tasks, statuses, and IDs.
+    *   **Next Task**: Use \`get-next-task\` to identify your immediate focus.
+    *   **Detailed Task Analysis**: For the selected task, use \`get-task --id <task_id>\` to get all details (description, status, dependencies, notes, subtasks). Read \`TASKS.md\` (\`read_file TASKS.md\`) for broader project context if needed.
+
+3.  **Information Gathering & Analysis (Iterative)**:
+    *   **Project Structure**: Use \`list_files .\`, \`list_files src/\` (or \`app/\`, \`lib/\`, etc.) to understand project layout.
+    *   **File Examination**: Use \`read_file <path_to_file> [start_line] [end_line]\` for source code, configs, docs.
+    *   **Code Search**: Use \`search_files --path <dir> --regex "pattern" --file_pattern "*.ext"\` for specific code/text.
+    *   **Code Definitions**: Use \`list_code_definition_names <path_to_file_or_dir>\` for class/function structures.
+
+4.  **Task Breakdown (If Necessary)**:
+    *   For complex tasks, use \`expand-task --id <task_id> --prompt "<optional_context>"\` to create sub-tasks.
+    *   Review sub-tasks; use \`update-task\` or \`add-task-note\` for refinements if needed.
+
+5.  **Implementation (Tool-Driven & Documented)**:
+    *   **Modifying Existing Files**:
+        1.  ALWAYS use \`read_file\` to get the exact current content of the section to change.
+        2.  Construct an \`apply_diff\` operation with a precise \`SEARCH\` block matching the content from \`read_file\`, and the desired \`REPLACE\` block.
+    *   **Creating New Files**: Use \`write_to_file <path>\` with the *complete* file content.
+    *   **Executing Commands**: Use \`execute_command "your_shell_command"\` for builds, tests, linters. Analyze output carefully for success/errors. Log key results with \`add-task-note\`.
+    *   Follow the **Iterative Subtask Implementation** process described below.
+
+6.  **Task Progress & Documentation**:
+    *   **Status Updates**: Keep task statuses current using \`update-task --id <task_id> --status <new_status>\` (e.g., 'in progress', 'completed', 'blocked', 'review').
+    *   **CRITICAL - Detailed Notes**: Use \`add-task-note --id <task_id> --note "..."\` to meticulously record:
+        *   Your understanding and implementation strategy.
+        *   Files created/modified (e.g., "Used \`apply_diff\` on \`com/example/Main.java\` to...").
+        *   Commands executed and their key results/outputs.
+        *   Assumptions made, clarifications received.
+        *   Problems encountered and solutions.
+
+## Iterative Subtask Implementation in Windsurf:
+
+This process applies to any granular piece of work:
+
+1.  **Understand Goal**: Use \`get-task --id <subtask_id>\` for full requirements.
+2.  **Explore & Plan**: Identify target files, functions, lines. Determine intended changes.
+3.  **Log Initial Plan**: Use \`add-task-note --id <subtask_id> --note "Initial Plan: [Comprehensive details: file paths, line numbers, proposed diffs, reasoning...]" \`.
+4.  **Start Implementation**: Set status: \`update-task --id <subtask_id> --status "in progress"\`. Begin coding/tool use.
+5.  **Refine & Log Progress Continuously**:
+    *   Review existing notes for the subtask (via \`get-task\`) before adding new ones to avoid redundancy.
+    *   **Regularly** use \`add-task-note --id <subtask_id> --note "Progress Update: [New findings, what worked/didn't, code snippets, decisions, deviations from plan...]" \`.
+    *   This creates a rich, timestamped log of your work.
+6.  **Verify & Complete**:
+    *   After implementation and verification (e.g., running tests via \`execute_command\`), mark complete: \`update-task --id <subtask_id> --status "completed"\`.
+    *   Add a final summary note: \`add-task-note --id <subtask_id> --note "Implementation complete and verified. [Summary of solution]."\`.
+
+## Understanding Task Structure (via MCP Tools):
+
+Expect task data from tools like \`get-task\` to include:
+
+*   **id**: Unique identifier.
+*   **title**: Brief title.
+*   **description**: Task summary.
+*   **status**: Current state (e.g., "pending", "in progress", "completed").
+*   **dependencies**: Array of prerequisite task IDs.
+*   **priority**: Importance level.
+*   **details** / **notes**: In-depth instructions, context, and your logged notes via \`add-task-note\`.
+*   **subtasks**: Array of sub-task objects.
+
+## Windsurf-Specific AI Considerations:
+
+*   **User Interface**: The user sees a Windsurf UI. Your detailed notes and accurate status updates via MCP tools are crucial for keeping them informed through their interface.
+*   **Configuration**: Be aware that Conductor Tasks or project-specific settings might exist (e.g., in \`.conductor/config.json\` or via environment variables). You typically don't manage these but note if tool failures suggest configuration issues (e.g., missing API keys for Conductor's own AI features).
+
+By adhering to these guidelines, you will effectively assist users with Conductor Tasks within the Windsurf IDE.

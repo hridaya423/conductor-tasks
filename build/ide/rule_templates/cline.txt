@@ -1,0 +1,94 @@
+# Cline IDE: AI Rules for Conductor Tasks Integration
+
+This document outlines how you, as an AI assistant, should interact with Conductor Tasks when operating within the Cline IDE. Your primary mode of operation is through the Conductor MCP server tools, with a strong emphasis on command-line centric workflows and meticulous documentation via \`add-task-note\`.
+
+## Fundamental Principles in Cline:
+
+*   **MCP Tool Exclusivity**: Your **only** method for interacting with Conductor Tasks and the project (files, commands) is through the provided MCP tools (e.g., \`get-task\`, \`update-task\`, \`add-task-note\`, \`read_file\`, \`apply_diff\`, \`execute_command\`, \`search_files\`, \`ask_followup_question\`). Do not attempt to parse CLI output or use direct file system operations for task data.
+*   **Command-Line Centricity**: Cline users are comfortable with the command line. Your explanations, use of \`execute_command\`, and logged notes should reflect this. Clearly state commands and their purpose.
+*   **CRITICAL - Detailed Note-Taking (\`add-task-note\`)**: This is paramount. For every significant action, finding, decision, or assumption, document it with \`add-task-note --id <task_id> --note "..."\`. This includes tools used, files affected, commands run (with key output), and rationale. This is your primary communication channel for progress and context.
+*   **Assume Terminal Visibility**: Users likely have a terminal visible. Your detailed notes and accurate task status updates are vital.
+*   **No Direct UI Interaction**: You cannot see or interact with Cline UI elements. Your perception is via MCP tools.
+*   **Efficiency and Precision**: Strive to accomplish tasks using a minimal number of well-chosen tool calls. Be precise with file paths and command syntax.
+*   **No Guesswork**: If requirements are unclear, paths uncertain, or ambiguity exists, use \`ask_followup_question\` immediately.
+
+## Comprehensive AI Workflow in Cline (Tool-Driven):
+
+1.  **Project Initialization (If Needed)**:
+    *   If \`TASKS.md\` is missing, suggest or use \`initialize-project\`.
+    *   For PRDs, consider \`parse-prd --input='<path_to_prd>'\` (if available as MCP tool, or guide user).
+
+2.  **Situational Awareness & Task Selection**:
+    *   **Overview**: \`list-tasks\` for all tasks, statuses, IDs.
+    *   **Next Task**: \`get-next-task\` to identify your immediate focus. This should be your starting point.
+    *   **Detailed Analysis**: \`get-task --id <task_id>\` to retrieve full details (description, status, dependencies, notes, subtasks). Consult \`TASKS.md\` (\`read_file TASKS.md\`) for broader project context.
+
+3.  **Information Gathering & Analysis (Iterative)**:
+    *   **Exploration**: \`list_files <path>\` (e.g., \`list_files .\`, \`list_files src/\`, \`list_files config/\`).
+    *   **Reading Content**: \`read_file <path> [start_line] [end_line]\` for source code, configs, \`TASKS.md\`.
+    *   **Searching**: \`search_files --path <directory> --regex "pattern" --file_pattern "*.ext"\` for code/text.
+    *   **Code Structure**: \`list_code_definition_names <path_to_file_or_directory>\` for classes, functions.
+
+4.  **Task Breakdown (Expansion)**:
+    *   For complex tasks, use \`expand-task --id <task_id> --prompt "<optional_context>"\` to create sub-tasks.
+    *   Review sub-tasks. Use \`update-task\` or \`add-task-note\` for refinements.
+
+5.  **Iterative Subtask/Task Implementation (Tool-Driven & Documented)**:
+    Follow this detailed process:
+    a.  **Understand Goal**: Use \`get-task --id <current_task_id>\` for full requirements and existing notes.
+    b.  **Explore & Plan**:
+        *   Thoroughly investigate using \`read_file\`, \`search_files\`, etc.
+        *   Identify target files, functions, lines. Determine intended changes (diffs), new file contents, or commands.
+    c.  **Log Initial Plan**: Use \`add-task-note --id <current_task_id> --note "Initial Plan for <task_title/objective>: [Files to act on, proposed diffs/content, commands to run, reasoning...]" \`. Be specific.
+    d.  **Execute & Implement**:
+        *   Set status: \`update-task --id <current_task_id> --status "in progress"\`.
+        *   Perform actions:
+            *   **Modifying Files**: \`read_file\` (for exact content) -> \`apply_diff <path>\` (with precise \`SEARCH\` block).
+            *   **Creating Files**: \`write_to_file <path>\` (with *complete* content).
+            *   **Running Commands**: \`execute_command "shell_command"\`.
+    e.  **Refine & Log Progress Continuously**:
+        *   **After each significant action/finding**: Review existing notes (via \`get-task\`).
+        *   **Regularly** use \`add-task-note --id <current_task_id> --note "Progress Update: [Action (e.g., 'Executed: pytest -k test_feature'), Outcome (e.g., '2 tests passed, 1 failed: ...'), Analysis/Next Step...]" \`.
+        *   Meticulously analyze output from \`execute_command\`. This is key feedback.
+    f.  **Verify & Complete**:
+        *   After implementation and verification (e.g., tests pass via \`execute_command\`), mark complete: \`update-task --id <current_task_id> --status "completed"\`.
+        *   Add final summary: \`add-task-note --id <current_task_id> --note "Implementation complete for <task_title/objective>. Verified via [method, e.g., 'pytest all passing']. Summary: [Brief solution]."\`.
+
+6.  **Handling Dependencies**:
+    *   Ensure prerequisite tasks are 'completed'.
+    *   If new dependencies arise, note them or suggest updates.
+    *   Use \`validate-dependencies\` (if available) for checks.
+
+## Understanding Task Structure (via MCP Tools):
+
+Expect task data from tools like \`get-task\` to include:
+*   **id**: Unique identifier.
+*   **title**: Brief title.
+*   **description**: Task summary.
+*   **status**: Current state.
+*   **dependencies**: Array of prerequisite task IDs.
+*   **priority**: Importance level.
+*   **details** / **notes**: In-depth instructions, context, and your logged notes.
+*   **subtasks**: Array of sub-task objects.
+
+## Configuration Awareness:
+*   Be aware of potential Conductor Tasks or project-specific configurations (e.g., in \`.conductor/config.json\`, or environment variables for MCP server). You don't manage these but note if tool failures suggest config issues.
+
+## Example Workflow Snippet:
+
+1.  \`get-next-task\` -> Task: "Refactor \`utils.py\` to improve performance of \`calculate_sum\`." (ID: TSK-15)
+2.  \`get-task --id TSK-15\` -> Read details.
+3.  \`read_file src/utils.py\` -> Examine current \`calculate_sum\` function.
+4.  \`add-task-note --id TSK-15 --note "Initial Plan for TSK-15: Current calculate_sum in utils.py uses a list comprehension then sum(). Will replace with a direct generator sum or math.fsum for potential performance gain on large lists. Will verify with a new pytest benchmark."\`
+5.  \`update-task --id TSK-15 --status "in progress"\`
+6.  (Internal thought: I see an inefficient pattern. I can optimize it.)
+7.  \`apply_diff src/utils.py\` (with SEARCH block from \`read_file\` and new optimized code in REPLACE for \`calculate_sum\`)
+8.  \`add-task-note --id TSK-15 --note "Progress Update: Applied diff to src/utils.py to optimize calculate_sum. Next: write and run tests."\`
+9.  \`write_to_file src/tests/test_utils_performance.py --content "..."\` (content for a new benchmark test)
+10. \`add-task-note --id TSK-15 --note "Progress Update: Created src/tests/test_utils_performance.py with benchmark for calculate_sum."\`
+11. \`execute_command "pytest src/tests/test_utils_performance.py"\` -> Run relevant tests.
+12. (Analyze output) -> \`add-task-note --id TSK-15 --note "Progress Update: pytest output: [key results showing performance improvement or issues]."\`
+13. (Assuming tests pass and show improvement) \`update-task --id TSK-15 --status completed\`
+14. \`add-task-note --id TSK-15 --note "Implementation complete for TSK-15. Refactored calculate_sum in utils.py, performance improvement verified with pytest benchmark. Optimized by replacing list comprehension with a direct sum."\`
+
+This detailed, tool-driven, and well-documented approach is key to success in Cline.
