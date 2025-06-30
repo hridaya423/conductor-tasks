@@ -4,6 +4,7 @@ import * as path from 'path';
 import logger from "../core/logger.js";
 import { IDEType } from '../core/types.js';
 import { IDERulesManager } from '../ide/ideRulesManager.js';
+import { normalizeWindowsPath } from '../core/pathUtils.js';
 export const InitializeTasksSchema = {
     projectName: z.string().describe("Name of the project"),
     projectDescription: z.string().describe("Description of the project"),
@@ -13,7 +14,8 @@ export async function initializeTasksHandler(taskManager, params) {
     try {
         const { projectName, projectDescription, filePath } = params;
         logger.info(`Initializing task system for project: ${projectName} at ${filePath}`);
-        const normalizedPath = path.resolve(filePath);
+        const decodedFilePath = normalizeWindowsPath(filePath);
+        const normalizedPath = path.resolve(decodedFilePath);
         if (fs.existsSync(normalizedPath)) {
             logger.warn(`Task file already exists at ${normalizedPath}. Initialization aborted.`);
             return {
@@ -27,21 +29,21 @@ export async function initializeTasksHandler(taskManager, params) {
                 // No suggested_actions on this specific error
             };
         }
-        const result = await taskManager.mcpInitializeTasks(projectName, projectDescription, filePath);
+        const result = await taskManager.mcpInitializeTasks(projectName, projectDescription, normalizedPath);
         logger.info(`Task system initialized successfully for ${projectName}.`);
         // Set the file path in the task manager
-        taskManager.setTasksFilePath(filePath);
+        taskManager.setTasksFilePath(normalizedPath);
         // Create directory if it doesn't exist
-        const directory = path.dirname(filePath);
+        const directory = path.dirname(normalizedPath);
         if (!fs.existsSync(directory)) {
             fs.mkdirSync(directory, { recursive: true });
             logger.info(`Created directory: ${directory}`);
         }
         // Initialize basic tasks file if it doesn't exist
-        if (!fs.existsSync(filePath)) {
+        if (!fs.existsSync(normalizedPath)) {
             const initialContent = `# ${projectName} Tasks\n\n${projectDescription}\n\n`;
-            fs.writeFileSync(filePath, initialContent);
-            logger.info(`Created tasks file at ${filePath}`);
+            fs.writeFileSync(normalizedPath, initialContent);
+            logger.info(`Created tasks file at ${normalizedPath}`);
         }
         // Generate IDE-specific rule files
         try {
