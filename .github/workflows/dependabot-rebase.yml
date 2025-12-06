@@ -1,40 +1,47 @@
 name: Dependabot Rebase Conflicts
 
 on:
-  # Run whenever main/master is updated (this is when conflicts occur)
   push:
     branches: [main, master]
-  # Also run manually if needed
   workflow_dispatch:
 
 permissions:
+  contents: write       # <--- REQUIRED: Allows the bot to update the branch
   pull-requests: write
-  contents: read
 
 jobs:
-  check-conflicts:
+  fix-conflicts:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Scan and Rebase
+      - name: Resolve Conflicts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Scanning open Dependabot PRs for conflicts..."
+          echo "Scanning open Dependabot PRs..."
           
-          # List all open Dependabot PRs
-          gh pr list --app dependabot --state open --json url --jq '.[].url' | while read pr_url; do
-            if [ -z "$pr_url" ]; then continue; fi
+          # Get Number, URL, and Status of all open Dependabot PRs
+          gh pr list --app dependabot --state open --json number,url,mergeStateStatus | jq -c '.[]' | while read pr; do
+            url=$(echo "$pr" | jq -r .url)
+            num=$(echo "$pr" | jq -r .number)
+            status=$(echo "$pr" | jq -r .mergeStateStatus)
 
-            # Check the status
-            STATUS=$(gh pr view "$pr_url" --json mergeStateStatus -q ".mergeStateStatus")
-
-            if [ "$STATUS" == "DIRTY" ]; then
-              echo "⚠️ Conflict detected in $pr_url. Requesting rebase..."
-              gh pr comment "$pr_url" --body "@dependabot rebase"
+            if [ "$status" == "DIRTY" ]; then
+              echo "------------------------------------------------"
+              echo "⚠️ Conflict detected in PR #$num: $url"
+              echo "   Attempting to update branch via API..."
+              
+              # Call GitHub API to merge 'main' into the PR branch (resolves conflict)
+              if gh api --method PUT "repos/${{ github.repository }}/pulls/$num/update-branch" > /dev/null 2>&1; then
+                 echo "   ✅ Branch updated successfully! (Conflict resolved)"
+              else
+                 echo "   ❌ Automatic update failed (Conflict is too complex)."
+                 # Leave a comment so you know you have to fix this one manually
+                 gh pr comment "$url" --body "⚠️ Workflow tried to rebase but failed. Manual conflict resolution required."
+              fi
             else
-              echo "✅ $pr_url is $STATUS"
+              echo "✅ PR #$num is clean ($status)"
             fi
           done
