@@ -1,0 +1,40 @@
+name: Dependabot Rebase Conflicts
+
+on:
+  # Run whenever main/master is updated (this is when conflicts occur)
+  push:
+    branches: [main, master]
+  # Also run manually if needed
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check-conflicts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan and Rebase
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Scanning open Dependabot PRs for conflicts..."
+          
+          # List all open Dependabot PRs
+          gh pr list --app dependabot --state open --json url --jq '.[].url' | while read pr_url; do
+            if [ -z "$pr_url" ]; then continue; fi
+
+            # Check the status
+            STATUS=$(gh pr view "$pr_url" --json mergeStateStatus -q ".mergeStateStatus")
+
+            if [ "$STATUS" == "DIRTY" ]; then
+              echo "⚠️ Conflict detected in $pr_url. Requesting rebase..."
+              gh pr comment "$pr_url" --body "@dependabot rebase"
+            else
+              echo "✅ $pr_url is $STATUS"
+            fi
+          done
