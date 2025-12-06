@@ -1,69 +1,29 @@
-name: Auto-merge Dependabot
+name: Dependabot Auto-merge
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled]
-  check_suite:
-    types: [completed]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  automerge:
-    if: github.actor == 'dependabot[bot]'
+  dependabot:
     runs-on: ubuntu-latest
-
+    # FIX: Check if the PR creator is Dependabot (works even if YOU push the update)
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Ensure checks completed
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = await github.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number
-            })
-            const checks = await github.checks.listForRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: pr.data.head.sha
-            })
-            const anyFailed = checks.data.check_runs.some(c => c.conclusion === 'failure')
-            const anyPending = checks.data.check_runs.some(c => c.status !== 'completed')
-            if (anyPending) core.setFailed('Checks not done yet')
-            if (anyFailed) core.setFailed('Checks failed')
+      - name: Auto-merge
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. Approve (ignore error if already approved)
+          gh pr review "$PR_URL" --approve || true
 
-      - name: Try rebase
-        id: rebase
-        continue-on-error: true
-        uses: peter-evans/rebase@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Recreate if rebase failed
-        if: steps.rebase.outcome == 'failure'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: '@dependabot recreate'
-            })
-            core.setFailed('Triggered recreate')
-
-      - name: Merge
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.pulls.merge({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              merge_method: 'squash'
-            })
+          # 2. Enable Auto-merge
+          gh pr merge "$PR_URL" --auto --squash || echo "Skipped $PR_URL (Conflicts)"
