@@ -58,7 +58,7 @@
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "groq-sdk": "^0.20.1",
-    "inquirer": "^9.3.7",
+    "inquirer": "^13.0.2",
     "markdown-it": "^14.0.0",
     "node-fetch": "^3.3.2",
     "openai": "^4.96.2",
