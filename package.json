@@ -42,7 +42,7 @@
     "@types/express": "^5.0.6",
     "@types/inquirer": "^9.0.7",
     "@types/markdown-it": "^14.1.2",
-    "@types/node": "^20.14.9",
+    "@types/node": "^24.10.1",
     "@types/node-fetch": "^2.6.11",
     "@types/yargs": "^17.0.32"
   },
