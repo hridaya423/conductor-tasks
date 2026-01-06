@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hridaya423-conductor-tasks-badge.png)](https://mseep.ai/app/hridaya423-conductor-tasks)
+
 # Conductor Tasks: Task Manager for AI Development
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
