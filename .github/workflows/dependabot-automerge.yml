@@ -11,7 +11,7 @@ permissions:
 jobs:
   dependabot:
     runs-on: ubuntu-latest
-    # FIX: Check if the PR creator is Dependabot (works even if YOU push the update)
+    # Only run for Dependabot PRs
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
       - name: Checkout
@@ -22,8 +22,9 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. Approve (ignore error if already approved)
+          # 1. Approve
           gh pr review "$PR_URL" --approve || true
 
-          # 2. Enable Auto-merge
-          gh pr merge "$PR_URL" --auto --squash || echo "Skipped $PR_URL (Conflicts)"
+          # 2. Merge with [skip vercel] in the body
+          # This ensures the final squash commit on main is ignored by Vercel
+          gh pr merge "$PR_URL" --auto --squash --body "Dependabot Group Merge [skip vercel]" || echo "Skipped (Conflicts)"
