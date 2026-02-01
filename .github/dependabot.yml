@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "06:00"
+    
+    # Group all updates into one PR
+    groups:
+      all-deps:
+        patterns:
+          - "*"
+
+    # Prefix commit messages to skip Vercel checks on the PR itself
+    commit-message:
+      prefix: "[skip vercel]"
+      include: "scope"
+
+    open-pull-requests-limit: 5
